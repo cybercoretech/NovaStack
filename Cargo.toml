@@ -21,9 +21,9 @@ path = "src/lib.rs"
 [dependencies]
 # CLI & Terminal UX
 clap = { version = "4.5", features = ["derive", "env"] }
-dialoguer = { version = "0.11", default-features = false, features = ["editor", "password"] }
-indicatif = "0.17"
-console = "0.15"
+dialoguer = { version = "0.12", default-features = false, features = ["editor", "password"] }
+indicatif = "0.18"
+console = "0.16"
 
 # Templating & Embedded Assets
 minijinja = { version = "2.7", features = ["loader"] }
@@ -32,13 +32,13 @@ rust-embed = "8.5"
 # Serialization & Configuration
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-toml = "0.8"
+toml = "1.2"
 
 # Filesystem & Utilities
 walkdir = "2.5"
-which = "7.0"
+which = "8.0"
 heck = "0.5"
-dirs = "5.0"
+dirs = "7.0"
 
 # Error Handling
 thiserror = "2.0"
