@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -9,10 +10,14 @@ pub struct Claims {
 }
 
 pub fn generate_token(user_id: &str, secret: &str, exp_hours: i64) -> Result<String, AppError> {
-    let expiration = chrono::Utc::now()
-        .checked_add_signed(chrono::Duration::hours(exp_hours))
-        .expect("valid timestamp")
-        .timestamp() as usize;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| AppError::Internal(e.into()))?
+        .as_secs();
+    let lifetime_secs = u64::try_from(exp_hours)
+        .map_err(|_| AppError::Internal(anyhow::anyhow!("JWT expiration must not be negative")))?
+        .saturating_mul(3600);
+    let expiration = usize::try_from(now.saturating_add(lifetime_secs)).unwrap_or(usize::MAX);
 
     let claims = Claims {
         sub: user_id.to_string(),

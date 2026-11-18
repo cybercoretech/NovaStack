@@ -1,0 +1,120 @@
+//! Server-rendered pages. Templates live in `templates/` at the project root and are
+//! compiled into the binary by Askama; HTMX swaps the HTML fragments returned here.
+
+use crate::error::AppError;
+use askama::Template;
+use axum::{
+    extract::{Path, State},
+    response::Html,
+    routing::{delete, get},
+    Form, Router,
+};
+use serde::Deserialize;
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+const MAX_TITLE_LEN: usize = 200;
+
+#[derive(Debug, Clone)]
+pub struct Todo {
+    pub id: u64,
+    pub title: String,
+}
+
+#[derive(Default)]
+struct Store {
+    next_id: u64,
+    todos: BTreeMap<u64, Todo>,
+}
+
+/// Example in-memory storage; replace with queries against `AppState::db`.
+#[derive(Clone, Default)]
+pub struct TodoStore {
+    inner: Arc<RwLock<Store>>,
+}
+
+#[derive(Template)]
+#[template(path = "index.html")]
+struct IndexPage {
+    title: &'static str,
+    todos: Vec<Todo>,
+}
+
+#[derive(Template)]
+#[template(path = "partials/todo.html")]
+struct TodoFragment {
+    todo: Todo,
+}
+
+#[derive(Deserialize)]
+pub struct NewTodo {
+    pub title: String,
+}
+
+pub fn routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new()
+        .route("/", get(index))
+        .route("/todos", axum::routing::post(create_todo))
+        .route("/todos/{id}", delete(delete_todo))
+        .with_state(TodoStore::default())
+}
+
+fn render(template: &impl Template) -> Result<Html<String>, AppError> {
+    template
+        .render()
+        .map(Html)
+        .map_err(|e| AppError::Internal(e.into()))
+}
+
+/// `GET /`: the full page.
+async fn index(State(store): State<TodoStore>) -> Result<Html<String>, AppError> {
+    let todos = store.inner.read().await.todos.values().cloned().collect();
+    render(&IndexPage {
+        title: env!("CARGO_PKG_NAME"),
+        todos,
+    })
+}
+
+/// `POST /todos`: returns just the new `<li>` for HTMX to append.
+async fn create_todo(
+    State(store): State<TodoStore>,
+    Form(input): Form<NewTodo>,
+) -> Result<Html<String>, AppError> {
+    let title = input.title.trim();
+    if title.is_empty() {
+        return Err(AppError::Validation("title must not be empty".into()));
+    }
+    if title.chars().count() > MAX_TITLE_LEN {
+        return Err(AppError::Validation(format!(
+            "title must be at most {MAX_TITLE_LEN} characters"
+        )));
+    }
+
+    let mut store = store.inner.write().await;
+    store.next_id += 1;
+    let todo = Todo {
+        id: store.next_id,
+        title: title.to_string(),
+    };
+    store.todos.insert(todo.id, todo.clone());
+    render(&TodoFragment { todo })
+}
+
+/// `DELETE /todos/{id}`: empty body, so HTMX removes the `<li>` it swaps.
+async fn delete_todo(
+    State(store): State<TodoStore>,
+    Path(id): Path<u64>,
+) -> Result<Html<String>, AppError> {
+    store
+        .inner
+        .write()
+        .await
+        .todos
+        .remove(&id)
+        .map(|_| Html(String::new()))
+        .ok_or(AppError::NotFound)
+}

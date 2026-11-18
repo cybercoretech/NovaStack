@@ -1,3 +1,4 @@
+use crate::archetypes::get_archetype;
 use crate::cli::{DbChoice, PluginChoice, TemplateChoice};
 use crate::config::ProjectConfig;
 use crate::error::{NovaError, Result};
@@ -77,6 +78,7 @@ impl ScaffoldEngine {
             "has_redis": config.plugins.contains(&PluginChoice::Redis),
             "has_workers": config.plugins.contains(&PluginChoice::Workers),
             "rust_version": GENERATED_RUST_VERSION,
+            "template": config.template.as_str(),
         });
 
         // 2. Render base template files
@@ -97,20 +99,7 @@ impl ScaffoldEngine {
                 NovaError::Other(format!("Embedded shared template not found: {}", path_str))
             })?;
 
-            let template_text = std::str::from_utf8(raw.data.as_ref()).map_err(|e| {
-                NovaError::Other(format!(
-                    "Invalid UTF-8 in shared template '{}': {}",
-                    path_str, e
-                ))
-            })?;
-
-            let rendered =
-                env.render_str(template_text, &ctx)
-                    .map_err(|e| NovaError::TemplateRender {
-                        template: path_str.to_string(),
-                        source: e,
-                    })?;
-
+            let rendered = render_or_copy(&env, &ctx, path_str, raw.data.as_ref())?;
             files.insert(target_path.to_string(), rendered);
         }
 
@@ -133,17 +122,7 @@ impl ScaffoldEngine {
                     NovaError::Other(format!("Embedded template not found: {}", path_str))
                 })?;
 
-                let template_text = std::str::from_utf8(raw.data.as_ref()).map_err(|e| {
-                    NovaError::Other(format!("Invalid UTF-8 in template '{}': {}", path_str, e))
-                })?;
-
-                let rendered =
-                    env.render_str(template_text, &ctx)
-                        .map_err(|e| NovaError::TemplateRender {
-                            template: path_str.to_string(),
-                            source: e,
-                        })?;
-
+                let rendered = render_or_copy(&env, &ctx, path_str, raw.data.as_ref())?;
                 files.insert(target_path.to_string(), rendered);
             }
         }
@@ -172,7 +151,8 @@ impl ScaffoldEngine {
             }
         }
 
-        // 4. Apply plugin patch modifications (Cargo.toml deps, router merges, AppState)
+        // 4. Wire in the archetype, then the plugins (Cargo.toml deps, router merges, AppState)
+        get_archetype(config.template).apply_patches(&mut files)?;
         for choice in &config.plugins {
             let plugin = get_plugin(*choice);
             plugin.apply_patches(&mut files)?;
@@ -238,7 +218,8 @@ impl ScaffoldEngine {
             config.project_name.clone(),
             config.db,
             config.plugins.clone(),
-        );
+        )
+        .with_template(config.template);
         project_cfg.save(&config.target_dir)?;
         println!("  {} novastack.toml", style("CREATED").green().bold());
 
@@ -325,6 +306,7 @@ impl ScaffoldEngine {
                 DbChoice::None => "none",
             },
             "rust_version": GENERATED_RUST_VERSION,
+            "template": cfg.template.as_str(),
         });
 
         // Apply patches first so a missing anchor aborts before anything is written
@@ -402,6 +384,26 @@ const PATCHABLE_FILES: &[&str] = &[
     "src/router.rs",
     "src/handlers/mod.rs",
 ];
+
+/// Renders `.jinja` templates; copies every other embedded file verbatim (e.g. Askama HTML
+/// templates, whose `{{ }}` syntax must reach the generated project untouched).
+fn render_or_copy(
+    env: &Environment<'static>,
+    ctx: &serde_json::Value,
+    path: &str,
+    data: &[u8],
+) -> Result<String> {
+    let text = std::str::from_utf8(data)
+        .map_err(|e| NovaError::Other(format!("Invalid UTF-8 in template '{}': {}", path, e)))?;
+    if !path.ends_with(".jinja") {
+        return Ok(text.to_string());
+    }
+    env.render_str(text, ctx)
+        .map_err(|e| NovaError::TemplateRender {
+            template: path.to_string(),
+            source: e,
+        })
+}
 
 /// Template environment shared by scaffolding, plugin installs and component generation.
 pub(crate) fn template_env() -> Environment<'static> {

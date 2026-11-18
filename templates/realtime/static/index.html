@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Realtime demo</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { max-width: 40rem; margin: 3rem auto; padding: 0 1rem; }
+      form { display: flex; gap: .5rem; margin-bottom: 1rem; }
+      input { flex: 1; padding: .5rem; }
+      section { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      ul { list-style: none; padding: 0; margin: 0; min-height: 4rem; border: 1px solid #8884; border-radius: .5rem; }
+      li { padding: .4rem .6rem; border-bottom: 1px solid #8882; overflow-wrap: anywhere; }
+      .status { font-size: .85rem; opacity: .7; }
+    </style>
+  </head>
+  <body>
+    <h1>Realtime demo</h1>
+    <p class="status" id="status">Connecting…</p>
+    <form id="send">
+      <label for="message" hidden>Message</label>
+      <input id="message" placeholder="Say something" maxlength="16384" required>
+      <button>Send over WebSocket</button>
+    </form>
+    <section>
+      <div><h2>WebSocket</h2><ul id="ws-log"></ul></div>
+      <div><h2>Server-Sent Events</h2><ul id="sse-log"></ul></div>
+    </section>
+    <script>
+      const log = (id, text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        document.getElementById(id).prepend(li);
+      };
+      const scheme = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${scheme}://${location.host}/ws`);
+      ws.onopen = () => (document.getElementById("status").textContent = "Connected");
+      ws.onclose = () => (document.getElementById("status").textContent = "Disconnected");
+      ws.onmessage = (event) => log("ws-log", event.data);
+      new EventSource("/events").onmessage = (event) => log("sse-log", event.data);
+      document.getElementById("send").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const input = document.getElementById("message");
+        ws.send(input.value);
+        input.value = "";
+      });
+    </script>
+  </body>
+</html>

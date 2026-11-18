@@ -1,0 +1,62 @@
+use axum::{
+    body::Body,
+    http::{header, Method, Request, StatusCode},
+    Router,
+};
+use http_body_util::BodyExt;
+use tower::ServiceExt;
+
+async fn call(app: &Router, method: Method, uri: &str, form: Option<&str>) -> (StatusCode, String) {
+    let mut request = Request::builder().method(method).uri(uri);
+    let body = match form {
+        Some(form) => {
+            request = request.header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+            Body::from(form.to_string())
+        }
+        None => Body::empty(),
+    };
+    let response = app
+        .clone()
+        .oneshot(request.body(body).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, String::from_utf8(bytes.to_vec()).unwrap())
+}
+
+#[tokio::test]
+async fn index_renders_htmx_page() {
+    let app: Router = {{ project_name_snake }}::web::routes();
+    let (status, html) = call(&app, Method::GET, "/", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("htmx.org"));
+    assert!(html.contains("hx-post=\"/todos\""));
+}
+
+#[tokio::test]
+async fn create_returns_escaped_fragment_and_delete_removes_it() {
+    let app: Router = {{ project_name_snake }}::web::routes();
+
+    let (status, fragment) = call(&app, Method::POST, "/todos", Some("title=%3Cb%3EMilk%3C%2Fb%3E")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(fragment.trim_start().starts_with("<li"));
+    assert!(fragment.contains("&#60;b&#62;Milk") || fragment.contains("&lt;b&gt;Milk"));
+    assert!(!fragment.contains("<b>"));
+
+    let (_, page) = call(&app, Method::GET, "/", None).await;
+    assert!(page.contains("Milk"));
+
+    let (status, body) = call(&app, Method::DELETE, "/todos/1", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_empty());
+    let (status, _) = call(&app, Method::DELETE, "/todos/1", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn rejects_blank_titles() {
+    let app: Router = {{ project_name_snake }}::web::routes();
+    let (status, _) = call(&app, Method::POST, "/todos", Some("title=+++")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}

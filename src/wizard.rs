@@ -26,11 +26,11 @@ pub fn run_wizard(initial_name: Option<String>, default_out: PathBuf) -> Result<
 
     // 1. Template Archetype Prompt
     let template_options = [
-        "REST API (Recommended: Standard JSON API with OpenAPI 3.1 & Swagger UI)",
-        "Full-Stack HTMX (Axum + Askama compile-time templates + HTMX + Tailwind)",
-        "gRPC Microservice (Tonic + Protocol Buffers high-performance RPC)",
-        "Realtime & Streaming (WebSockets, Server-Sent Events & broadcast pub/sub)",
-        "Minimal / Nano (Barebones lightweight service with sub-second compile times)",
+        "REST API (Recommended: JSON API with OpenAPI spec & Swagger UI)",
+        "Full-Stack HTMX (Askama templates + HTMX fragment swaps + Tailwind)",
+        "gRPC Microservice (Tonic + Protocol Buffers, health & reflection)",
+        "Realtime & Streaming (WebSockets, Server-Sent Events & broadcast hub)",
+        "Minimal (Bare Axum service with a trimmed dependency set)",
     ];
 
     let template_idx = Select::with_theme(&theme)

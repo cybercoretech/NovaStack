@@ -1,5 +1,6 @@
 use clap::Parser;
 use console::style;
+use novastack_core::archetypes::{self, get_archetype};
 use novastack_core::cli::{Cli, Commands, PluginChoice};
 use novastack_core::cli_generate::run_generate;
 use novastack_core::doctor::run_doctor;
@@ -124,6 +125,18 @@ fn print_plugins_list() {
                 .bold()
                 .green(),
             desc
+        );
+    }
+
+    println!(
+        "\n{}",
+        style("Build Templates (`novastack new -t <template>`):").bold()
+    );
+    for choice in archetypes::ALL {
+        println!(
+            "  {} {}",
+            style(format!("{:<10}", choice.as_str())).bold().magenta(),
+            get_archetype(choice).summary()
         );
     }
 

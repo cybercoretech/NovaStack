@@ -30,6 +30,16 @@ fn shared_target_dir() -> PathBuf {
 }
 
 fn scaffold(tmp: &TempDir, name: &str, db: DbChoice, plugins: &[PluginChoice]) -> PathBuf {
+    scaffold_template(tmp, name, TemplateChoice::Rest, db, plugins)
+}
+
+fn scaffold_template(
+    tmp: &TempDir,
+    name: &str,
+    template: TemplateChoice,
+    db: DbChoice,
+    plugins: &[PluginChoice],
+) -> PathBuf {
     let target_dir = tmp.path().join(name);
     ScaffoldEngine::execute(&ScaffoldConfig {
         project_name: name.to_string(),
@@ -38,7 +48,7 @@ fn scaffold(tmp: &TempDir, name: &str, db: DbChoice, plugins: &[PluginChoice]) -
         plugins: plugins.to_vec(),
         dry_run: false,
         skip_hooks: true,
-        template: TemplateChoice::Rest,
+        template,
     })
     .expect("scaffolding should succeed");
     target_dir
@@ -110,6 +120,79 @@ fn gen_postgres_all_plugins() {
 #[ignore = "needs network; slow"]
 fn gen_sqlite_all_plugins() {
     check_new("gen-sqlite-all", DbChoice::Sqlite, &ALL_PLUGINS);
+}
+
+/// Each non-default archetype on its own and with sqlite + every plugin.
+fn check_archetype(template: TemplateChoice) {
+    let tmp = TempDir::new().unwrap();
+    let base = format!("gen-{}", template.as_str());
+    assert_builds_clean(&scaffold_template(
+        &tmp,
+        &base,
+        template,
+        DbChoice::None,
+        &[],
+    ));
+    let full = format!("{base}-all");
+    assert_builds_clean(&scaffold_template(
+        &tmp,
+        &full,
+        template,
+        DbChoice::Sqlite,
+        &ALL_PLUGINS,
+    ));
+}
+
+#[test]
+#[ignore = "needs network; slow"]
+fn gen_htmx_archetype() {
+    check_archetype(TemplateChoice::Htmx);
+}
+
+#[test]
+#[ignore = "needs network; slow"]
+fn gen_grpc_archetype() {
+    check_archetype(TemplateChoice::Grpc);
+}
+
+#[test]
+#[ignore = "needs network; slow"]
+fn gen_realtime_archetype() {
+    check_archetype(TemplateChoice::Realtime);
+}
+
+#[test]
+#[ignore = "needs network; slow"]
+fn gen_minimal_archetype() {
+    check_archetype(TemplateChoice::Minimal);
+}
+
+/// The minimal archetype has a trimmed dependency set: plugins and every generator must
+/// still compile on it when added later.
+#[test]
+#[ignore = "needs network; slow"]
+fn gen_minimal_add_plugins_and_generate_components() {
+    let tmp = TempDir::new().unwrap();
+    let project = scaffold_template(
+        &tmp,
+        "gen-min-grow",
+        TemplateChoice::Minimal,
+        DbChoice::None,
+        &[],
+    );
+    for plugin in ALL_PLUGINS {
+        ScaffoldEngine::add_plugin(&project, plugin).expect("add plugin should succeed");
+    }
+    for kind in [
+        GenerateKind::Module,
+        GenerateKind::Handler,
+        GenerateKind::Service,
+        GenerateKind::Dto,
+        GenerateKind::Middleware,
+    ] {
+        run_generate(kind, "UserProfile", &project).expect("generate should succeed");
+    }
+    assert_builds_clean(&project);
 }
 
 /// `novastack add` for every plugin, then `generate` for every component kind, on one project.

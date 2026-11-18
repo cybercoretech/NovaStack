@@ -1,0 +1,148 @@
+//! Realtime streaming: a broadcast [`Hub`] fanned out to WebSocket and SSE clients.
+
+use crate::error::AppError;
+use axum::{
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        State,
+    },
+    http::StatusCode,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Html, IntoResponse,
+    },
+    routing::{get, post},
+    Json, Router,
+};
+use futures_util::{SinkExt, Stream, StreamExt};
+use serde::Deserialize;
+use serde_json::{json, Value};
+use std::convert::Infallible;
+use tokio::sync::broadcast::{self, error::RecvError};
+use tokio_stream::wrappers::BroadcastStream;
+
+/// Messages buffered per subscriber before slow clients start skipping messages.
+const HUB_CAPACITY: usize = 256;
+const MAX_MESSAGE_LEN: usize = 16 * 1024;
+
+/// Fan-out channel shared by every connected client.
+#[derive(Clone)]
+pub struct Hub {
+    tx: broadcast::Sender<String>,
+}
+
+impl Default for Hub {
+    fn default() -> Self {
+        let (tx, _) = broadcast::channel(HUB_CAPACITY);
+        Self { tx }
+    }
+}
+
+impl Hub {
+    /// Sends `message` to every subscriber and returns how many received it.
+    pub fn publish(&self, message: impl Into<String>) -> usize {
+        self.tx.send(message.into()).unwrap_or(0)
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<String> {
+        self.tx.subscribe()
+    }
+}
+
+pub fn routes<S>(hub: Hub) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new()
+        .route("/", get(demo_page))
+        .route("/ws", get(ws_handler))
+        .route("/events", get(sse_handler))
+        .route("/publish", post(publish))
+        .with_state(hub)
+}
+
+/// `GET /`: a small page that exercises WebSocket, SSE and publish.
+async fn demo_page() -> Html<&'static str> {
+    Html(include_str!("../../static/index.html"))
+}
+
+/// `GET /ws`: bidirectional; text frames from any client are broadcast to all clients.
+async fn ws_handler(ws: WebSocketUpgrade, State(hub): State<Hub>) -> impl IntoResponse {
+    ws.max_message_size(MAX_MESSAGE_LEN)
+        .on_upgrade(move |socket| handle_socket(socket, hub))
+}
+
+async fn handle_socket(socket: WebSocket, hub: Hub) {
+    let (mut sender, mut receiver) = socket.split();
+    let mut rx = hub.subscribe();
+
+    let mut send_task = tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                Ok(message) => {
+                    if sender.send(Message::Text(message.into())).await.is_err() {
+                        break;
+                    }
+                }
+                Err(RecvError::Lagged(skipped)) => {
+                    tracing::warn!(skipped, "WebSocket client lagging; messages dropped");
+                }
+                Err(RecvError::Closed) => break,
+            }
+        }
+    });
+
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(message)) = receiver.next().await {
+            match message {
+                Message::Text(text) => {
+                    hub.publish(text.as_str());
+                }
+                Message::Close(_) => break,
+                _ => {}
+            }
+        }
+    });
+
+    // When either side finishes, stop the other.
+    tokio::select! {
+        _ = &mut send_task => recv_task.abort(),
+        _ = &mut recv_task => send_task.abort(),
+    }
+}
+
+/// `GET /events`: one-way stream of every published message.
+async fn sse_handler(
+    State(hub): State<Hub>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let stream = BroadcastStream::new(hub.subscribe()).filter_map(|message| {
+        // Lagged receivers skip what they missed instead of ending the stream.
+        std::future::ready(message.ok().map(|data| Ok(Event::default().data(data))))
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+#[derive(Deserialize)]
+pub struct PublishRequest {
+    pub message: String,
+}
+
+/// `POST /publish` `{"message": "..."}`: broadcast from plain HTTP (e.g. other services).
+async fn publish(
+    State(hub): State<Hub>,
+    Json(input): Json<PublishRequest>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    if input.message.is_empty() {
+        return Err(AppError::Validation("message must not be empty".into()));
+    }
+    if input.message.len() > MAX_MESSAGE_LEN {
+        return Err(AppError::Validation(format!(
+            "message must be at most {MAX_MESSAGE_LEN} bytes"
+        )));
+    }
+    let delivered_to = hub.publish(input.message);
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(json!({ "delivered_to": delivered_to })),
+    ))
+}
