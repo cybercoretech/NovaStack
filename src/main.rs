@@ -33,7 +33,13 @@ fn run(cli: Cli) -> Result<()> {
                 if !no_interactive && name.is_none() {
                     let answers = run_wizard(name, out)?;
                     let target = answers.out.join(&answers.name);
-                    (answers.name, answers.db, answers.plugins, answers.template, target)
+                    (
+                        answers.name,
+                        answers.db,
+                        answers.plugins,
+                        answers.template,
+                        target,
+                    )
                 } else {
                     let proj_name = name.unwrap_or_else(|| "my-api".to_string());
                     let target = out.join(&proj_name);

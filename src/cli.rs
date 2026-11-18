@@ -131,7 +131,6 @@ impl fmt::Display for TemplateChoice {
     }
 }
 
-
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DbChoice {

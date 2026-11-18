@@ -94,8 +94,8 @@ pub fn run_generate(kind: GenerateKind, name: &str, project_dir: &Path) -> Resul
     };
 
     let target = project_dir.join(&target_rel);
-    let module_file_clash = kind == GenerateKind::Module
-        && project_dir.join(format!("src/{snake}.rs")).exists();
+    let module_file_clash =
+        kind == GenerateKind::Module && project_dir.join(format!("src/{snake}.rs")).exists();
     if target.exists() || module_file_clash {
         return Err(NovaError::Other(format!(
             "{} '{}' already exists at {}",
@@ -221,14 +221,70 @@ fn component_ident(name: &str) -> Result<String> {
 
 const RESERVED: &[&str] = &[
     // Rust keywords
-    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
-    "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
-    "mut", "pub", "ref", "return", "self", "static", "struct", "super", "trait", "true", "type",
-    "unsafe", "use", "where", "while", "abstract", "become", "box", "do", "final", "gen",
-    "macro", "override", "priv", "try", "typeof", "unsized", "virtual", "yield",
+    "as",
+    "async",
+    "await",
+    "break",
+    "const",
+    "continue",
+    "crate",
+    "dyn",
+    "else",
+    "enum",
+    "extern",
+    "false",
+    "fn",
+    "for",
+    "if",
+    "impl",
+    "in",
+    "let",
+    "loop",
+    "match",
+    "mod",
+    "move",
+    "mut",
+    "pub",
+    "ref",
+    "return",
+    "self",
+    "static",
+    "struct",
+    "super",
+    "trait",
+    "true",
+    "type",
+    "unsafe",
+    "use",
+    "where",
+    "while",
+    "abstract",
+    "become",
+    "box",
+    "do",
+    "final",
+    "gen",
+    "macro",
+    "override",
+    "priv",
+    "try",
+    "typeof",
+    "unsized",
+    "virtual",
+    "yield",
     // Modules every NovaStack project already has
-    "config", "error", "handlers", "middleware", "router", "state", "db", "services", "dtos",
-    "health", "main", "lib",
+    "config",
+    "error",
+    "handlers",
+    "middleware",
+    "router",
+    "state",
+    "db",
+    "services",
+    "dtos",
+    "health",
+    "main",
+    "lib",
 ];
 
 fn read(path: &Path) -> Result<String> {

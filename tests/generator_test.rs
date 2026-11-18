@@ -6,7 +6,14 @@ use tempfile::TempDir;
 fn scaffold(tmp: &TempDir, name: &str) {
     Command::cargo_bin("novastack")
         .expect("novastack binary")
-        .args(["new", name, "--no-interactive", "--skip-hooks", "--db", "none"])
+        .args([
+            "new",
+            name,
+            "--no-interactive",
+            "--skip-hooks",
+            "--db",
+            "none",
+        ])
         .args(["--out", tmp.path().to_str().unwrap()])
         .assert()
         .success();

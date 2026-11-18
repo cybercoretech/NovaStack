@@ -98,13 +98,18 @@ impl ScaffoldEngine {
             })?;
 
             let template_text = std::str::from_utf8(raw.data.as_ref()).map_err(|e| {
-                NovaError::Other(format!("Invalid UTF-8 in shared template '{}': {}", path_str, e))
+                NovaError::Other(format!(
+                    "Invalid UTF-8 in shared template '{}': {}",
+                    path_str, e
+                ))
             })?;
 
-            let rendered = env.render_str(template_text, &ctx).map_err(|e| NovaError::TemplateRender {
-                template: path_str.to_string(),
-                source: e,
-            })?;
+            let rendered =
+                env.render_str(template_text, &ctx)
+                    .map_err(|e| NovaError::TemplateRender {
+                        template: path_str.to_string(),
+                        source: e,
+                    })?;
 
             files.insert(target_path.to_string(), rendered);
         }
@@ -132,11 +137,12 @@ impl ScaffoldEngine {
                     NovaError::Other(format!("Invalid UTF-8 in template '{}': {}", path_str, e))
                 })?;
 
-                let rendered = env.render_str(template_text, &ctx)
-                    .map_err(|e| NovaError::TemplateRender {
-                        template: path_str.to_string(),
-                        source: e,
-                    })?;
+                let rendered =
+                    env.render_str(template_text, &ctx)
+                        .map_err(|e| NovaError::TemplateRender {
+                            template: path_str.to_string(),
+                            source: e,
+                        })?;
 
                 files.insert(target_path.to_string(), rendered);
             }

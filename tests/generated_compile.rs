@@ -61,7 +61,10 @@ fn cargo(project: &Path, args: &[&str]) {
 }
 
 fn assert_builds_clean(project: &Path) {
-    cargo(project, &["clippy", "--all-targets", "--", "-D", "warnings"]);
+    cargo(
+        project,
+        &["clippy", "--all-targets", "--", "-D", "warnings"],
+    );
     cargo(project, &["test"]);
 }
 

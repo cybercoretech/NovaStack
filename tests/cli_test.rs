@@ -55,7 +55,14 @@ fn test_scaffold_dry_run() {
 #[test]
 fn test_dry_run_includes_dotfiles_and_skips_db_when_none() {
     let mut cmd = Command::cargo_bin("novastack").unwrap();
-    cmd.args(["new", "demo", "--dry-run", "--no-interactive", "--db", "none"]);
+    cmd.args([
+        "new",
+        "demo",
+        "--dry-run",
+        "--no-interactive",
+        "--db",
+        "none",
+    ]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains(".env.example"))
