@@ -2,7 +2,7 @@
 name = "novastack"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.88"
 description = "Modular, opinionated CLI scaffolding tool for production-ready Rust web backends"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cybercoretech/NovaStack"
