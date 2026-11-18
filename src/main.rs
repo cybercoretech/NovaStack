@@ -1,6 +1,7 @@
 use clap::Parser;
 use console::style;
 use novastack_core::cli::{Cli, Commands, PluginChoice};
+use novastack_core::cli_generate::run_generate;
 use novastack_core::doctor::run_doctor;
 use novastack_core::error::Result;
 use novastack_core::scaffold::{ScaffoldConfig, ScaffoldEngine};
@@ -66,6 +67,14 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Doctor => {
             run_doctor();
         }
+
+        Commands::Generate {
+            kind,
+            name,
+            project_dir,
+        } => {
+            run_generate(kind, &name, &project_dir)?;
+        }
     }
 
     Ok(())
@@ -90,7 +99,7 @@ fn print_plugins_list() {
         ),
         (
             PluginChoice::Otel,
-            "OpenTelemetry distributed tracing exporter and Prometheus metrics endpoint (`/metrics`).",
+            "Prometheus metrics endpoint (`/metrics`) with per-route HTTP request metrics.",
         ),
         (
             PluginChoice::Redis,

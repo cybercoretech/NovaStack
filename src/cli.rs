@@ -68,6 +68,34 @@ pub enum Commands {
 
     /// Check system dependencies (rustc, cargo, docker, sqlx, just)
     Doctor,
+
+    /// Generate a component inside an existing NovaStack project
+    Generate {
+        /// Type of component to generate
+        #[arg(value_enum)]
+        kind: GenerateKind,
+
+        /// Name of the component (e.g. `user` or `UserProfile`)
+        name: String,
+
+        /// Path to target project (defaults to current dir)
+        #[arg(short = 'p', long, default_value = ".")]
+        project_dir: PathBuf,
+    },
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GenerateKind {
+    /// A new top-level module (`src/<name>/mod.rs`)
+    Module,
+    /// An Axum handler with its own router, nested at `/<name>`
+    Handler,
+    /// A service struct (`src/services/<name>.rs`)
+    Service,
+    /// A serde request/response DTO (`src/dtos/<name>.rs`)
+    Dto,
+    /// An Axum `from_fn` middleware (`src/middleware/<name>.rs`)
+    Middleware,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
