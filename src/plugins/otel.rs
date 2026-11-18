@@ -1,7 +1,7 @@
 use super::Plugin;
 use crate::cli::PluginChoice;
 use crate::error::Result;
-use crate::scaffold::patcher::AnchorPatcher;
+use crate::scaffold::patcher::AnchorPatcher as P;
 use std::collections::HashMap;
 
 pub struct OtelPlugin;
@@ -16,12 +16,12 @@ impl Plugin for OtelPlugin {
     }
 
     fn description(&self) -> &'static str {
-        "OpenTelemetry distributed tracing exporter & Prometheus /metrics endpoint"
+        "Prometheus /metrics endpoint with per-route HTTP request metrics (OTLP trace export planned)"
     }
 
     fn dependencies(&self) -> &'static str {
         r#"metrics = "0.24"
-metrics-exporter-prometheus = "0.16"
+metrics-exporter-prometheus = { version = "0.16", default-features = false }
 "#
     }
 
@@ -30,27 +30,26 @@ metrics-exporter-prometheus = "0.16"
     }
 
     fn apply_patches(&self, files: &mut HashMap<String, String>) -> Result<()> {
-        if let Some(router_content) = files.get_mut("src/router.rs") {
-            *router_content = AnchorPatcher::inject_before(
-                router_content,
-                AnchorPatcher::ROUTE_ANCHOR,
-                ".route(\"/metrics\", axum::routing::get(crate::telemetry::metrics_handler))",
-            );
-        }
-
-        if let Some(lib_content) = files.get_mut("src/lib.rs") {
-            *lib_content = AnchorPatcher::inject_before(
-                lib_content,
-                AnchorPatcher::IMPORTS_ANCHOR,
-                "pub mod telemetry;",
-            );
-        }
-
-        if let Some(cargo_content) = files.get_mut("Cargo.toml") {
-            *cargo_content =
-                AnchorPatcher::append_to_dependencies(cargo_content, self.dependencies());
-        }
-
+        P::patch(files, "src/lib.rs", P::IMPORTS_ANCHOR, "pub mod telemetry;")?;
+        P::patch(
+            files,
+            "src/router.rs",
+            P::ROUTE_ANCHOR,
+            ".route(\"/metrics\", axum::routing::get(crate::telemetry::metrics_handler))",
+        )?;
+        P::patch(
+            files,
+            "src/router.rs",
+            P::LAYERS_ANCHOR,
+            ".layer(axum::middleware::from_fn(crate::telemetry::track_metrics))",
+        )?;
+        P::patch(
+            files,
+            "src/main.rs",
+            P::STARTUP_ANCHOR,
+            "project::telemetry::init_metrics()?;",
+        )?;
+        P::patch(files, "Cargo.toml", P::DEPS_ANCHOR, self.dependencies())?;
         Ok(())
     }
 }

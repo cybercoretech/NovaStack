@@ -1,0 +1,10 @@
+use axum::{extract::Request, middleware::Next, response::Response};
+
+/// `{{ name_snake }}` middleware.
+///
+/// Register it in `router.rs`, e.g. on the app router:
+/// `.layer(axum::middleware::from_fn(crate::middleware::{{ name_snake }}::{{ name_snake }}))`
+pub async fn {{ name_snake }}(request: Request, next: Next) -> Response {
+    // TODO: inspect or modify the request before it reaches the handler
+    next.run(request).await
+}

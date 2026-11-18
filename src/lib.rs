@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod cli_generate;
 pub mod config;
 pub mod doctor;
 pub mod error;

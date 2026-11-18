@@ -1,7 +1,7 @@
 use super::Plugin;
 use crate::cli::PluginChoice;
 use crate::error::Result;
-use crate::scaffold::patcher::AnchorPatcher;
+use crate::scaffold::patcher::AnchorPatcher as P;
 use std::collections::HashMap;
 
 pub struct RedisPlugin;
@@ -21,7 +21,6 @@ impl Plugin for RedisPlugin {
 
     fn dependencies(&self) -> &'static str {
         r#"deadpool-redis = { version = "0.19", features = ["rt_tokio_1"] }
-redis = { version = "0.28", features = ["tokio-comp"] }
 "#
     }
 
@@ -30,27 +29,46 @@ redis = { version = "0.28", features = ["tokio-comp"] }
     }
 
     fn apply_patches(&self, files: &mut HashMap<String, String>) -> Result<()> {
-        if let Some(state_content) = files.get_mut("src/state.rs") {
-            *state_content = AnchorPatcher::inject_before(
-                state_content,
-                AnchorPatcher::STATE_ANCHOR,
-                "pub redis_pool: Option<deadpool_redis::Pool>,",
-            );
-        }
+        P::patch(files, "src/lib.rs", P::IMPORTS_ANCHOR, "pub mod cache;")?;
 
-        if let Some(lib_content) = files.get_mut("src/lib.rs") {
-            *lib_content = AnchorPatcher::inject_before(
-                lib_content,
-                AnchorPatcher::IMPORTS_ANCHOR,
-                "pub mod cache;",
-            );
-        }
+        P::patch(
+            files,
+            "src/config.rs",
+            P::CONFIG_FIELDS_ANCHOR,
+            "pub redis_url: String,",
+        )?;
+        P::patch(
+            files,
+            "src/config.rs",
+            P::CONFIG_LOAD_ANCHOR,
+            r#"let redis_url = std::env::var("REDIS_URL")
+    .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+"#,
+        )?;
+        P::patch(files, "src/config.rs", P::CONFIG_INIT_ANCHOR, "redis_url,")?;
 
-        if let Some(cargo_content) = files.get_mut("Cargo.toml") {
-            *cargo_content =
-                AnchorPatcher::append_to_dependencies(cargo_content, self.dependencies());
-        }
+        P::patch(
+            files,
+            "src/state.rs",
+            P::STATE_ANCHOR,
+            "pub redis: deadpool_redis::Pool,",
+        )?;
+        P::patch(
+            files,
+            "src/state.rs",
+            P::STATE_SETUP_ANCHOR,
+            "let redis = crate::cache::create_redis_pool(&config.redis_url)?;",
+        )?;
+        P::patch(files, "src/state.rs", P::STATE_INIT_ANCHOR, "redis,")?;
 
+        P::patch_optional(
+            files,
+            ".env.example",
+            P::ENV_ANCHOR,
+            "# Redis Configuration\nREDIS_URL=redis://localhost:6379\n\n",
+        );
+
+        P::patch(files, "Cargo.toml", P::DEPS_ANCHOR, self.dependencies())?;
         Ok(())
     }
 }

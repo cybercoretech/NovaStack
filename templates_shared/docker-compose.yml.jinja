@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   app:
     build:
@@ -13,10 +11,16 @@ services:
       - RUST_LOG=info,tower_http=debug
       {% if db == "postgres" %}
       - DATABASE_URL=postgres://postgres:postgres@db:5432/{{ project_name_snake }}
+      {% elif db == "sqlite" %}
+      - DATABASE_URL=sqlite:///app/data/{{ project_name_snake }}.db?mode=rwc
       {% endif %}
       {% if has_redis %}
       - REDIS_URL=redis://redis:6379
       {% endif %}
+    {% if db == "sqlite" %}
+    volumes:
+      - appdata:/app/data
+    {% endif %}
     {% if db == "postgres" or has_redis %}
     depends_on:
       {% if db == "postgres" %}
@@ -57,10 +61,14 @@ services:
       - redisdata:/data
 {% endif %}
 
+{% if db != "none" or has_redis %}
 volumes:
 {% if db == "postgres" %}
   pgdata:
+{% elif db == "sqlite" %}
+  appdata:
 {% endif %}
 {% if has_redis %}
   redisdata:
+{% endif %}
 {% endif %}

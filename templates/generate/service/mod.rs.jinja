@@ -1,0 +1,19 @@
+use crate::state::AppState;
+
+/// Business logic for `{{ name_kebab }}`. Construct it from shared state inside handlers:
+/// `{{ name_pascal }}Service::new(state.clone())`.
+#[derive(Clone)]
+pub struct {{ name_pascal }}Service {
+    state: AppState,
+}
+
+impl {{ name_pascal }}Service {
+    pub fn new(state: AppState) -> Self {
+        Self { state }
+    }
+
+    /// Shared application state (config, pools, ...).
+    pub fn state(&self) -> &AppState {
+        &self.state
+    }
+}

@@ -1,7 +1,7 @@
 use super::Plugin;
 use crate::cli::PluginChoice;
 use crate::error::Result;
-use crate::scaffold::patcher::AnchorPatcher;
+use crate::scaffold::patcher::AnchorPatcher as P;
 use std::collections::HashMap;
 
 pub struct WorkersPlugin;
@@ -38,19 +38,14 @@ impl Plugin for WorkersPlugin {
     }
 
     fn apply_patches(&self, files: &mut HashMap<String, String>) -> Result<()> {
-        if let Some(lib_content) = files.get_mut("src/lib.rs") {
-            *lib_content = AnchorPatcher::inject_before(
-                lib_content,
-                AnchorPatcher::IMPORTS_ANCHOR,
-                "pub mod workers;",
-            );
-        }
-
-        if let Some(cargo_content) = files.get_mut("Cargo.toml") {
-            *cargo_content =
-                AnchorPatcher::append_to_dependencies(cargo_content, self.dependencies());
-        }
-
+        P::patch(files, "src/lib.rs", P::IMPORTS_ANCHOR, "pub mod workers;")?;
+        P::patch(
+            files,
+            "src/main.rs",
+            P::STARTUP_ANCHOR,
+            "tokio::spawn(project::workers::start_workers());",
+        )?;
+        P::patch(files, "Cargo.toml", P::DEPS_ANCHOR, self.dependencies())?;
         Ok(())
     }
 }

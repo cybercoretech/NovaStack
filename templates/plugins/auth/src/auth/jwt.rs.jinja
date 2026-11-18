@@ -34,5 +34,5 @@ pub fn verify_token(token: &str, secret: &str) -> Result<Claims, AppError> {
         &Validation::default(),
     )
     .map(|data| data.claims)
-    .map_err(|e| AppError::Unauthorized(format!("Invalid or expired token: {}", e)))
+    .map_err(|e| AppError::Unauthorized(format!("Invalid or expired token: {e}")))
 }

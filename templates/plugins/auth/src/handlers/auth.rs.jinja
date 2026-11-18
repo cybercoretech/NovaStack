@@ -1,9 +1,13 @@
-use crate::auth::jwt::generate_token;
+use crate::auth::{jwt::generate_token, AuthUser};
 use crate::error::AppError;
 use crate::state::AppState;
-use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
+use axum::{
+    extract::State,
+    routing::{get, post},
+    Json, Router,
+};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -17,26 +21,35 @@ pub struct LoginResponse {
 }
 
 pub fn auth_router() -> Router<AppState> {
-    Router::new().route("/login", post(login_handler))
+    Router::new()
+        .route("/login", post(login_handler))
+        .route("/me", get(me_handler))
 }
 
+/// Issues a JWT for the given credentials.
+///
+/// SCAFFOLD STUB: this accepts any non-empty username/password. Before shipping, look the
+/// user up and check the stored hash with `crate::auth::password::verify_password`.
 pub async fn login_handler(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Json<LoginResponse>, AppError> {
     if payload.username.is_empty() || payload.password.is_empty() {
-        return Err(AppError::Validation("Username and password are required".into()));
+        return Err(AppError::Validation(
+            "Username and password are required".into(),
+        ));
     }
 
-    // In a production app, verify password hash against database
     let token = generate_token(
         &payload.username,
         &state.config.jwt_secret,
         state.config.jwt_expiration_hours,
     )?;
 
-    Ok(Json(json!({
-        "status": "success",
-        "token": token
-    })))
+    Ok(Json(LoginResponse { token }))
+}
+
+/// Example protected route: returns the caller identified by their bearer token.
+pub async fn me_handler(user: AuthUser) -> Json<Value> {
+    Json(json!({ "user_id": user.user_id }))
 }

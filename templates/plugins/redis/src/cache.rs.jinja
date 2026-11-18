@@ -1,6 +1,21 @@
-use deadpool_redis::{Config, CreatePoolError, Pool, Runtime};
+use deadpool_redis::{redis::AsyncCommands, Config, CreatePoolError, Pool, Runtime};
 
+/// Creates the Redis connection pool. Connections are opened lazily on first use,
+/// so startup does not fail if Redis is briefly unavailable.
 pub fn create_redis_pool(url: &str) -> Result<Pool, CreatePoolError> {
     let cfg = Config::from_url(url);
     cfg.create_pool(Some(Runtime::Tokio1))
+}
+
+/// Reads a cached string value.
+pub async fn get(pool: &Pool, key: &str) -> anyhow::Result<Option<String>> {
+    let mut conn = pool.get().await?;
+    Ok(conn.get(key).await?)
+}
+
+/// Stores a string value with a time-to-live in seconds.
+pub async fn set_ex(pool: &Pool, key: &str, value: &str, ttl_secs: u64) -> anyhow::Result<()> {
+    let mut conn = pool.get().await?;
+    let _: () = conn.set_ex(key, value, ttl_secs).await?;
+    Ok(())
 }

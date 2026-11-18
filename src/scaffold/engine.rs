@@ -20,6 +20,10 @@ pub struct Templates;
 #[folder = "templates_shared/"]
 pub struct SharedTemplates;
 
+/// Rust toolchain the generated projects declare (`rust-version`) and build with in Docker.
+/// Keep in sync with the toolchain the generated-project compile matrix is verified on.
+pub const GENERATED_RUST_VERSION: &str = "1.88";
+
 #[derive(Debug, Clone)]
 pub struct ScaffoldConfig {
     pub project_name: String,
@@ -54,10 +58,7 @@ impl ScaffoldEngine {
         }
 
         // 1. Prepare Jinja template environment
-        let mut env = Environment::new();
-        env.add_filter("kebab_case", |s: String| s.to_kebab_case());
-        env.add_filter("snake_case", |s: String| s.to_snake_case());
-        env.add_filter("pascal_case", |s: String| s.to_pascal_case());
+        let env = template_env();
 
         // Context object passed into all templates
         let ctx = json!({
@@ -75,6 +76,7 @@ impl ScaffoldEngine {
             "has_otel": config.plugins.contains(&PluginChoice::Otel),
             "has_redis": config.plugins.contains(&PluginChoice::Redis),
             "has_workers": config.plugins.contains(&PluginChoice::Workers),
+            "rust_version": GENERATED_RUST_VERSION,
         });
 
         // 2. Render base template files
@@ -84,42 +86,48 @@ impl ScaffoldEngine {
         for file in SharedTemplates::iter() {
             let path_str = file.as_ref();
             // Remove the .jinja suffix to get the target file path
-            let target_path = path_str
-                .strip_suffix(".jinja")
-                .unwrap_or(path_str);
+            let target_path = path_str.strip_suffix(".jinja").unwrap_or(path_str);
+
+            // Projects without a database get no db module or migrations
+            if config.db == DbChoice::None && target_path.starts_with("src/db/") {
+                continue;
+            }
 
             let raw = SharedTemplates::get(path_str).ok_or_else(|| {
                 NovaError::Other(format!("Embedded shared template not found: {}", path_str))
             })?;
 
             let template_text = std::str::from_utf8(raw.data.as_ref()).map_err(|e| {
-                NovaError::Other(format!("Invalid UTF-8 in shared template '{}': {}", path_str, e))
+                NovaError::Other(format!(
+                    "Invalid UTF-8 in shared template '{}': {}",
+                    path_str, e
+                ))
             })?;
 
-            let rendered = env.render_str(template_text, &ctx).map_err(|e| NovaError::TemplateRender {
-                template: path_str.to_string(),
-                source: e,
-            })?;
+            let rendered =
+                env.render_str(template_text, &ctx)
+                    .map_err(|e| NovaError::TemplateRender {
+                        template: path_str.to_string(),
+                        source: e,
+                    })?;
 
             files.insert(target_path.to_string(), rendered);
         }
 
-        // 3. Render template‑specific files based on selected archetype
+        // 3. Overlay archetype-specific files (paths are relative to `templates/`), replacing
+        //    any shared file with the same target path
         let template_dir = match config.template {
-            TemplateChoice::Rest => "templates/rest/",
-            TemplateChoice::Htmx => "templates/htmx/",
-            TemplateChoice::Grpc => "templates/grpc/",
-            TemplateChoice::Realtime => "templates/realtime/",
-            TemplateChoice::Minimal => "templates/minimal/",
+            TemplateChoice::Rest => "rest/",
+            TemplateChoice::Htmx => "htmx/",
+            TemplateChoice::Grpc => "grpc/",
+            TemplateChoice::Realtime => "realtime/",
+            TemplateChoice::Minimal => "minimal/",
         };
         for file in Templates::iter() {
             let path_str = file.as_ref();
             if path_str.starts_with(template_dir) {
-                let target_path = path_str
-                    .strip_prefix(template_dir)
-                    .unwrap_or(path_str)
-                    .strip_suffix(".jinja")
-                    .unwrap_or(path_str);
+                let relative = path_str.strip_prefix(template_dir).unwrap_or(path_str);
+                let target_path = relative.strip_suffix(".jinja").unwrap_or(relative);
 
                 let raw = Templates::get(path_str).ok_or_else(|| {
                     NovaError::Other(format!("Embedded template not found: {}", path_str))
@@ -129,11 +137,12 @@ impl ScaffoldEngine {
                     NovaError::Other(format!("Invalid UTF-8 in template '{}': {}", path_str, e))
                 })?;
 
-                let rendered = env.render_str(template_text, &ctx)
-                    .map_err(|e| NovaError::TemplateRender {
-                        template: path_str.to_string(),
-                        source: e,
-                    })?;
+                let rendered =
+                    env.render_str(template_text, &ctx)
+                        .map_err(|e| NovaError::TemplateRender {
+                            template: path_str.to_string(),
+                            source: e,
+                        })?;
 
                 files.insert(target_path.to_string(), rendered);
             }
@@ -278,7 +287,7 @@ impl ScaffoldEngine {
 
         // Load existing files into map for patcher
         let mut files = HashMap::new();
-        for rel in &["Cargo.toml", "src/lib.rs", "src/router.rs", "src/state.rs"] {
+        for rel in PATCHABLE_FILES {
             let p = project_dir.join(rel);
             if p.exists() {
                 let content = fs::read_to_string(&p).map_err(|e| NovaError::Io {
@@ -289,11 +298,21 @@ impl ScaffoldEngine {
             }
         }
 
+        let original = files.clone();
+
+        // Refuse to clobber files the user may already have
+        for (_, target_rel) in plugin.template_files() {
+            if project_dir.join(target_rel).exists() {
+                return Err(NovaError::Other(format!(
+                    "'{}' already exists; refusing to overwrite it while installing '{}'",
+                    target_rel,
+                    plugin.name()
+                )));
+            }
+        }
+
         // Set up Jinja context for rendering new plugin files
-        let mut env = Environment::new();
-        env.add_filter("kebab_case", |s: String| s.to_kebab_case());
-        env.add_filter("snake_case", |s: String| s.to_snake_case());
-        env.add_filter("pascal_case", |s: String| s.to_pascal_case());
+        let env = template_env();
 
         let ctx = json!({
             "project_name": cfg.name,
@@ -305,7 +324,11 @@ impl ScaffoldEngine {
                 DbChoice::Sqlite => "sqlite",
                 DbChoice::None => "none",
             },
+            "rust_version": GENERATED_RUST_VERSION,
         });
+
+        // Apply patches first so a missing anchor aborts before anything is written
+        plugin.apply_patches(&mut files)?;
 
         // Write new plugin template files
         for (tmpl_path, target_rel) in plugin.template_files() {
@@ -335,11 +358,11 @@ impl ScaffoldEngine {
             }
         }
 
-        // Apply patches to existing project files
-        plugin.apply_patches(&mut files)?;
-
-        // Write updated patched files back to disk
+        // Write patched files back to disk (only the ones that changed)
         for (rel, content) in files {
+            if original.get(&rel) == Some(&content) {
+                continue;
+            }
             let p = project_dir.join(&rel);
             fs::write(&p, content).map_err(|e| NovaError::Io {
                 path: p.clone(),
@@ -351,6 +374,12 @@ impl ScaffoldEngine {
         // Save updated novastack.toml
         cfg.save(project_dir)?;
         println!("  {} Updated novastack.toml", style("✔").green());
+        if plugin_choice == PluginChoice::Redis {
+            println!(
+                "  {} Add a `redis` service to docker-compose.yml if you run the stack with Compose.",
+                style("i").cyan()
+            );
+        }
         println!(
             "\n{}",
             style("✨ Plugin installed successfully! Run `cargo check` to verify.")
@@ -360,6 +389,31 @@ impl ScaffoldEngine {
 
         Ok(())
     }
+}
+
+/// Project files that plugins may patch through anchor comments.
+const PATCHABLE_FILES: &[&str] = &[
+    "Cargo.toml",
+    ".env.example",
+    "src/lib.rs",
+    "src/main.rs",
+    "src/config.rs",
+    "src/state.rs",
+    "src/router.rs",
+    "src/handlers/mod.rs",
+];
+
+/// Template environment shared by scaffolding, plugin installs and component generation.
+pub(crate) fn template_env() -> Environment<'static> {
+    let mut env = Environment::new();
+    // Drop the newline after `{% ... %}` tags and indentation before them, so conditional
+    // blocks don't leave stray blank or indented lines in generated files.
+    env.set_trim_blocks(true);
+    env.set_lstrip_blocks(true);
+    env.add_filter("kebab_case", |s: String| s.to_kebab_case());
+    env.add_filter("snake_case", |s: String| s.to_snake_case());
+    env.add_filter("pascal_case", |s: String| s.to_pascal_case());
+    env
 }
 
 fn print_success_summary(config: &ScaffoldConfig) {

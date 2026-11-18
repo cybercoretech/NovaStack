@@ -1,7 +1,7 @@
 use super::Plugin;
 use crate::cli::PluginChoice;
 use crate::error::Result;
-use crate::scaffold::patcher::AnchorPatcher;
+use crate::scaffold::patcher::AnchorPatcher as P;
 use std::collections::HashMap;
 
 pub struct AuthPlugin;
@@ -22,7 +22,7 @@ impl Plugin for AuthPlugin {
     fn dependencies(&self) -> &'static str {
         r#"jsonwebtoken = "9.3"
 argon2 = "0.5"
-axum-extra = { version = "0.9", features = ["typed-header"] }
+password-hash = { version = "0.5", features = ["getrandom"] }
 "#
     }
 
@@ -31,6 +31,14 @@ axum-extra = { version = "0.9", features = ["typed-header"] }
             ("plugins/auth/src/auth/mod.rs.jinja", "src/auth/mod.rs"),
             ("plugins/auth/src/auth/jwt.rs.jinja", "src/auth/jwt.rs"),
             (
+                "plugins/auth/src/auth/password.rs.jinja",
+                "src/auth/password.rs",
+            ),
+            (
+                "plugins/auth/src/auth/extractor.rs.jinja",
+                "src/auth/extractor.rs",
+            ),
+            (
                 "plugins/auth/src/handlers/auth.rs.jinja",
                 "src/handlers/auth.rs",
             ),
@@ -38,28 +46,53 @@ axum-extra = { version = "0.9", features = ["typed-header"] }
     }
 
     fn apply_patches(&self, files: &mut HashMap<String, String>) -> Result<()> {
-        // Patch src/lib.rs or router
-        if let Some(router_content) = files.get_mut("src/router.rs") {
-            *router_content = AnchorPatcher::inject_before(
-                router_content,
-                AnchorPatcher::ROUTE_ANCHOR,
-                ".nest(\"/auth\", crate::handlers::auth::auth_router())",
-            );
-        }
+        P::patch(files, "src/lib.rs", P::IMPORTS_ANCHOR, "pub mod auth;")?;
+        P::patch(
+            files,
+            "src/handlers/mod.rs",
+            P::HANDLERS_ANCHOR,
+            "pub mod auth;",
+        )?;
+        P::patch(
+            files,
+            "src/router.rs",
+            P::ROUTE_ANCHOR,
+            ".nest(\"/auth\", crate::handlers::auth::auth_router())",
+        )?;
 
-        if let Some(lib_content) = files.get_mut("src/lib.rs") {
-            *lib_content = AnchorPatcher::inject_before(
-                lib_content,
-                AnchorPatcher::IMPORTS_ANCHOR,
-                "pub mod auth;",
-            );
-        }
+        P::patch(
+            files,
+            "src/config.rs",
+            P::CONFIG_FIELDS_ANCHOR,
+            "pub jwt_secret: String,\npub jwt_expiration_hours: i64,",
+        )?;
+        P::patch(
+            files,
+            "src/config.rs",
+            P::CONFIG_LOAD_ANCHOR,
+            r#"let jwt_secret = std::env::var("JWT_SECRET")
+    .context("JWT_SECRET environment variable must be set")?;
+let jwt_expiration_hours = std::env::var("JWT_EXPIRATION_HOURS")
+    .unwrap_or_else(|_| "24".to_string())
+    .parse::<i64>()
+    .context("JWT_EXPIRATION_HOURS must be an integer")?;
+"#,
+        )?;
+        P::patch(
+            files,
+            "src/config.rs",
+            P::CONFIG_INIT_ANCHOR,
+            "jwt_secret,\njwt_expiration_hours,",
+        )?;
 
-        if let Some(cargo_content) = files.get_mut("Cargo.toml") {
-            *cargo_content =
-                AnchorPatcher::append_to_dependencies(cargo_content, self.dependencies());
-        }
+        P::patch_optional(
+            files,
+            ".env.example",
+            P::ENV_ANCHOR,
+            "# JWT Authentication (generate a secret with: openssl rand -hex 32)\nJWT_SECRET=change-me-to-a-long-random-secret\nJWT_EXPIRATION_HOURS=24\n\n",
+        );
 
+        P::patch(files, "Cargo.toml", P::DEPS_ANCHOR, self.dependencies())?;
         Ok(())
     }
 }
