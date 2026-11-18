@@ -1,0 +1,9 @@
+# Keep build output, secrets and VCS data out of the Docker build context
+target/
+.env
+*.env
+!.env.example
+.git/
+*.db
+*.db-shm
+*.db-wal
