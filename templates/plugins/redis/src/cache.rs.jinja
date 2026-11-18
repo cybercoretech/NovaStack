@@ -1,0 +1,6 @@
+use deadpool_redis::{Config, CreatePoolError, Pool, Runtime};
+
+pub fn create_redis_pool(url: &str) -> Result<Pool, CreatePoolError> {
+    let cfg = Config::from_url(url);
+    cfg.create_pool(Some(Runtime::Tokio1))
+}

@@ -1,0 +1,8 @@
+pub mod tasks;
+
+use tracing::info;
+
+pub async fn start_workers() {
+    info!("Background worker supervisor started.");
+    // Spawn your worker queues here
+}

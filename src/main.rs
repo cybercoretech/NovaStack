@@ -1,0 +1,126 @@
+use clap::Parser;
+use console::style;
+use novastack_core::cli::{Cli, Commands, PluginChoice};
+use novastack_core::doctor::run_doctor;
+use novastack_core::error::Result;
+use novastack_core::scaffold::{ScaffoldConfig, ScaffoldEngine};
+use novastack_core::wizard::run_wizard;
+use std::process;
+
+fn main() {
+    let cli = Cli::parse();
+
+    if let Err(err) = run(cli) {
+        eprintln!("\n{} {}", style("error:").bold().red(), err);
+        process::exit(1);
+    }
+}
+
+fn run(cli: Cli) -> Result<()> {
+    match cli.command {
+        Commands::New {
+            name,
+            db,
+            plugins,
+            out,
+            dry_run,
+            no_interactive,
+            skip_hooks,
+        } => {
+            let (project_name, selected_db, selected_plugins, target_dir) =
+                if !no_interactive && name.is_none() {
+                    let answers = run_wizard(name, out)?;
+                    let target = answers.out.join(&answers.name);
+                    (answers.name, answers.db, answers.plugins, target)
+                } else {
+                    let proj_name = name.unwrap_or_else(|| "my-api".to_string());
+                    let target = out.join(&proj_name);
+                    (proj_name, db, plugins, target)
+                };
+
+            let config = ScaffoldConfig {
+                project_name,
+                target_dir,
+                db: selected_db,
+                plugins: selected_plugins,
+                dry_run,
+                skip_hooks,
+            };
+
+            ScaffoldEngine::execute(&config)?;
+        }
+
+        Commands::Add {
+            plugin,
+            project_dir,
+        } => {
+            ScaffoldEngine::add_plugin(&project_dir, plugin)?;
+        }
+
+        Commands::List => {
+            print_plugins_list();
+        }
+
+        Commands::Doctor => {
+            run_doctor();
+        }
+    }
+
+    Ok(())
+}
+
+fn print_plugins_list() {
+    println!(
+        "{}",
+        style("⚡ NovaStack Available Plugins & Components")
+            .bold()
+            .cyan()
+    );
+    println!(
+        "{}",
+        style("Use `novastack add <plugin>` inside an existing project.\n").dim()
+    );
+
+    let plugins = [
+        (
+            PluginChoice::Auth,
+            "JWT token generation/verification, Argon2 password hashing, and user authentication handlers.",
+        ),
+        (
+            PluginChoice::Otel,
+            "OpenTelemetry distributed tracing exporter and Prometheus metrics endpoint (`/metrics`).",
+        ),
+        (
+            PluginChoice::Redis,
+            "Redis connection pool (`deadpool-redis`) and caching helper layer.",
+        ),
+        (
+            PluginChoice::Workers,
+            "Asynchronous background worker supervisor and task processing queue.",
+        ),
+    ];
+
+    for (choice, desc) in plugins {
+        println!(
+            "  {} {}",
+            style(format!("{:<10}", format!("{:?}", choice).to_lowercase()))
+                .bold()
+                .green(),
+            desc
+        );
+    }
+
+    println!("\n{}", style("Supported Database Backends:").bold());
+    println!(
+        "  {} Production PostgreSQL with SQLx connection pooling and embedded migrations",
+        style("postgres  ").bold().yellow()
+    );
+    println!(
+        "  {} Lightweight SQLx file-based or in-memory database",
+        style("sqlite    ").bold().yellow()
+    );
+    println!(
+        "  {} Stateless / in-memory state only (no database driver)",
+        style("none      ").bold().yellow()
+    );
+}

@@ -1,0 +1,21 @@
+use axum::response::IntoResponse;
+use metrics_exporter_prometheus::PrometheusBuilder;
+use std::sync::OnceLock;
+
+static RECORDER_INIT: OnceLock<()> = OnceLock::new();
+
+pub fn init_metrics() {
+    RECORDER_INIT.get_or_init(|| {
+        let builder = PrometheusBuilder::new();
+        builder
+            .install()
+            .expect("failed to install Prometheus metric recorder");
+    });
+}
+
+pub async fn metrics_handler() -> impl IntoResponse {
+    let handle = PrometheusBuilder::new()
+        .install_recorder()
+        .expect("recorder available");
+    handle.render()
+}

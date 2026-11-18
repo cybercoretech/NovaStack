@@ -1,0 +1,50 @@
+[package]
+name = "novastack"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+description = "Modular, opinionated CLI scaffolding tool for production-ready Rust web backends"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cybercoretech/NovaStack"
+readme = "README.md"
+keywords = ["scaffold", "axum", "backend", "sqlx", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "novastack"
+path = "src/main.rs"
+
+[lib]
+name = "novastack_core"
+path = "src/lib.rs"
+
+[dependencies]
+# CLI & Terminal UX
+clap = { version = "4.5", features = ["derive", "env"] }
+dialoguer = { version = "0.11", default-features = false, features = ["editor", "password"] }
+indicatif = "0.17"
+console = "0.15"
+
+# Templating & Embedded Assets
+minijinja = { version = "2.7", features = ["loader"] }
+rust-embed = "8.5"
+
+# Serialization & Configuration
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Filesystem & Utilities
+walkdir = "2.5"
+which = "7.0"
+heck = "0.5"
+dirs = "5.0"
+
+# Error Handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.16"
