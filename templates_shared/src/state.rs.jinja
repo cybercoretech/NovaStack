@@ -4,19 +4,19 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
-    {% if db == "postgres" %}
+{% if db == "postgres" %}
     pub db: sqlx::PgPool,
-    {% elif db == "sqlite" %}
+{% elif db == "sqlite" %}
     pub db: sqlx::SqlitePool,
-    {% endif %}
+{% endif %}
     // NOVASTACK:STATE
 }
 
 impl AppState {
     pub async fn new(config: &Config) -> anyhow::Result<Self> {
         let config_arc = Arc::new(config.clone());
+{% if db == "postgres" %}
 
-        {% if db == "postgres" %}
         tracing::info!("Connecting to PostgreSQL database...");
         let db = sqlx::postgres::PgPoolOptions::new()
             .max_connections(config.database_max_connections)
@@ -25,7 +25,8 @@ impl AppState {
 
         tracing::info!("Running embedded database migrations...");
         sqlx::migrate!("./src/db/migrations").run(&db).await?;
-        {% elif db == "sqlite" %}
+{% elif db == "sqlite" %}
+
         tracing::info!("Connecting to SQLite database...");
         let db = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(config.database_max_connections)
@@ -34,13 +35,16 @@ impl AppState {
 
         tracing::info!("Running embedded database migrations...");
         sqlx::migrate!("./src/db/migrations").run(&db).await?;
-        {% endif %}
+{% endif %}
+
+        // NOVASTACK:STATE_SETUP
 
         Ok(Self {
             config: config_arc,
-            {% if db != "none" %}
+{% if db != "none" %}
             db,
-            {% endif %}
+{% endif %}
+            // NOVASTACK:STATE_INIT
         })
     }
 }

@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use {{ project_name_snake }} as project;
 use {{ project_name_snake }}::config::Config;
 use {{ project_name_snake }}::router::create_app;
 use {{ project_name_snake }}::state::AppState;
@@ -20,6 +22,8 @@ async fn main() -> anyhow::Result<()> {
     // 2. Load configuration & initialize application state
     let config = Config::from_env()?;
     let state = AppState::new(&config).await?;
+
+    // NOVASTACK:STARTUP
 
     // 3. Assemble router and middleware
     let app = create_app(state);

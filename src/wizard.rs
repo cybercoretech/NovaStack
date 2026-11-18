@@ -95,7 +95,7 @@ pub fn run_wizard(initial_name: Option<String>, default_out: PathBuf) -> Result<
     // 4. Feature Plugins prompt (skip for minimal unless requested)
     let plugin_options = [
         "Authentication (JWT, password hashing via argon2, auth middleware)",
-        "Observability (OpenTelemetry OTLP traces & Prometheus /metrics)",
+        "Observability (Prometheus /metrics with per-route request metrics)",
         "Redis Cache (Connection pool & caching layers via deadpool-redis)",
         "Background Workers (Async task queue runner & supervisor)",
     ];

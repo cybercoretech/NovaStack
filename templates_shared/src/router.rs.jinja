@@ -1,5 +1,4 @@
 use crate::handlers::health::health_check;
-use crate::middleware::setup_middleware;
 use crate::state::AppState;
 use axum::{routing::get, Router};
 
@@ -9,8 +8,10 @@ pub fn create_app(state: AppState) -> Router {
         // NOVASTACK:ROUTES
         ;
 
-    Router::new()
+    let app = Router::new()
         .merge(api_routes)
-        .with_state(state)
-        .layer(setup_middleware())
+        // NOVASTACK:LAYERS
+        ;
+
+    crate::middleware::apply(app).with_state(state)
 }

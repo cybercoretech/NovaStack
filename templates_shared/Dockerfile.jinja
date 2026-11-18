@@ -1,6 +1,6 @@
 # ── Stage 1: Dependency Chef & Builder ──────────────────────────────
-FROM rust:1.80-slim-bookworm AS chef
-RUN cargo install cargo-chef
+FROM rust:{{ rust_version }}-slim-bookworm AS chef
+RUN cargo install cargo-chef --locked
 WORKDIR /app
 
 FROM chef AS planner
@@ -23,6 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+{% if db == "sqlite" %}
+RUN mkdir -p /app/data && chown 1000:1000 /app/data
+{% endif %}
 COPY --from=builder /app/target/release/{{ project_name_kebab }} /usr/local/bin/app
 
 USER 1000:1000

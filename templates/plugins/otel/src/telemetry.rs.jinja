@@ -1,21 +1,54 @@
-use axum::response::IntoResponse;
-use metrics_exporter_prometheus::PrometheusBuilder;
+use axum::{
+    extract::{MatchedPath, Request},
+    middleware::Next,
+    response::{IntoResponse, Response},
+};
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use std::sync::OnceLock;
+use std::time::Instant;
 
-static RECORDER_INIT: OnceLock<()> = OnceLock::new();
+static PROMETHEUS: OnceLock<PrometheusHandle> = OnceLock::new();
 
-pub fn init_metrics() {
-    RECORDER_INIT.get_or_init(|| {
-        let builder = PrometheusBuilder::new();
-        builder
-            .install()
-            .expect("failed to install Prometheus metric recorder");
-    });
+/// Installs the global Prometheus recorder. Safe to call more than once; only the first
+/// call installs it. Called from `main` at startup.
+pub fn init_metrics() -> anyhow::Result<()> {
+    if PROMETHEUS.get().is_some() {
+        return Ok(());
+    }
+    let handle = PrometheusBuilder::new().install_recorder()?;
+    let _ = PROMETHEUS.set(handle);
+    Ok(())
 }
 
+/// `GET /metrics`: Prometheus text exposition of every recorded metric.
 pub async fn metrics_handler() -> impl IntoResponse {
-    let handle = PrometheusBuilder::new()
-        .install_recorder()
-        .expect("recorder available");
-    handle.render()
+    match PROMETHEUS.get() {
+        Some(handle) => {
+            handle.run_upkeep();
+            handle.render()
+        }
+        None => String::new(),
+    }
+}
+
+/// Records `http_requests_total` and `http_request_duration_seconds` for every request,
+/// labelled by method, matched route and status code.
+pub async fn track_metrics(request: Request, next: Next) -> Response {
+    let start = Instant::now();
+    let method = request.method().to_string();
+    let path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|p| p.as_str().to_string())
+        .unwrap_or_else(|| "unmatched".to_string());
+
+    let response = next.run(request).await;
+
+    let status = response.status().as_u16().to_string();
+    let labels = [("method", method), ("path", path), ("status", status)];
+    metrics::counter!("http_requests_total", &labels).increment(1);
+    metrics::histogram!("http_request_duration_seconds", &labels)
+        .record(start.elapsed().as_secs_f64());
+
+    response
 }

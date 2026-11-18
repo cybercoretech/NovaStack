@@ -1,24 +1,28 @@
+use axum::{http::StatusCode, Router};
 use std::time::Duration;
-use tower::ServiceBuilder;
 use tower_http::{
     cors::{Any, CorsLayer},
     timeout::TimeoutLayer,
     trace::TraceLayer,
 };
 
-pub fn setup_middleware() -> ServiceBuilder<
-    tower::layer::util::Stack<
-        TimeoutLayer,
-        tower::layer::util::Stack<CorsLayer, tower::layer::util::Stack<TraceLayer<tower_http::classify::ServerErrorsAsFailures>, tower::layer::util::Identity>>,
-    >,
-> {
+// NOVASTACK:MIDDLEWARE
+
+/// Applies the global middleware stack (tracing, CORS, request timeout) to every route.
+pub fn apply<S>(router: Router<S>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
-    ServiceBuilder::new()
-        .layer(TraceLayer::new_for_http())
+    router
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
         .layer(cors)
-        .layer(TimeoutLayer::new(Duration::from_secs(30)))
+        .layer(TraceLayer::new_for_http())
 }

@@ -1,0 +1,35 @@
+use crate::auth::jwt::verify_token;
+use crate::error::AppError;
+use crate::state::AppState;
+use axum::{
+    extract::FromRequestParts,
+    http::{header::AUTHORIZATION, request::Parts},
+};
+
+/// The authenticated caller. Add it as a handler argument to require a valid
+/// `Authorization: Bearer <jwt>` header; requests without one get `401 Unauthorized`.
+#[derive(Debug, Clone)]
+pub struct AuthUser {
+    pub user_id: String,
+}
+
+impl FromRequestParts<AppState> for AuthUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let token = parts
+            .headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .ok_or_else(|| AppError::Unauthorized("Missing bearer token".into()))?;
+
+        let claims = verify_token(token, &state.config.jwt_secret)?;
+        Ok(Self {
+            user_id: claims.sub,
+        })
+    }
+}
