@@ -1,0 +1,48 @@
+# {{ project_name }} Developer Commands
+set dotenv-load := true
+
+# Run application locally
+run:
+    cargo run
+
+# Watch for code changes and restart server
+watch:
+    cargo watch -x run
+
+# Format code according to Rust conventions
+fmt:
+    cargo fmt
+
+# Run Clippy linter
+lint:
+    cargo clippy --all-targets -- -D warnings
+
+# Run all test suites
+test:
+    cargo test
+
+{% if db == "postgres" %}
+# Start PostgreSQL container
+db-up:
+    docker compose up -d db
+
+# Stop PostgreSQL container
+db-down:
+    docker compose down
+
+# Run database migrations
+migrate:
+    cargo sqlx migrate run
+
+# Generate offline query cache for compilation in CI/Docker
+prepare:
+    cargo sqlx prepare
+{% endif %}
+
+# Build production release binary
+build:
+    cargo build --release
+
+# Run Docker compose stack
+up:
+    docker compose up --build

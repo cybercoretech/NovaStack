@@ -26,16 +26,17 @@ fn run(cli: Cli) -> Result<()> {
             dry_run,
             no_interactive,
             skip_hooks,
+            template,
         } => {
-            let (project_name, selected_db, selected_plugins, target_dir) =
+            let (project_name, selected_db, selected_plugins, selected_template, target_dir) =
                 if !no_interactive && name.is_none() {
                     let answers = run_wizard(name, out)?;
                     let target = answers.out.join(&answers.name);
-                    (answers.name, answers.db, answers.plugins, target)
+                    (answers.name, answers.db, answers.plugins, answers.template, target)
                 } else {
                     let proj_name = name.unwrap_or_else(|| "my-api".to_string());
                     let target = out.join(&proj_name);
-                    (proj_name, db, plugins, target)
+                    (proj_name, db, plugins, template, target)
                 };
 
             let config = ScaffoldConfig {
@@ -45,6 +46,7 @@ fn run(cli: Cli) -> Result<()> {
                 plugins: selected_plugins,
                 dry_run,
                 skip_hooks,
+                template: selected_template,
             };
 
             ScaffoldEngine::execute(&config)?;

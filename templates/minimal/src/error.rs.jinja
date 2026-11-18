@@ -1,0 +1,56 @@
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde_json::json;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Resource not found")]
+    NotFound,
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    {% if db != "none" %}
+    #[error("Database error")]
+    Database(#[from] sqlx::Error),
+    {% endif %}
+
+    #[error("Internal server error")]
+    Internal(#[from] anyhow::Error),
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status, client_message) = match &self {
+            AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found"),
+            AppError::Validation(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.as_str()),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.as_str()),
+            {% if db != "none" %}
+            AppError::Database(err) => {
+                tracing::error!(error = %err, "Database query failure");
+                (StatusCode::INTERNAL_SERVER_ERROR, "A database error occurred")
+            }
+            {% endif %}
+            AppError::Internal(err) => {
+                tracing::error!(error = %err, "Internal server error");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+            }
+        };
+
+        let body = Json(json!({
+            "error": {
+                "code": status.as_u16(),
+                "message": client_message
+            }
+        }));
+
+        (status, body).into_response()
+    }
+}

@@ -1,4 +1,4 @@
-use crate::cli::{DbChoice, PluginChoice};
+use crate::cli::{DbChoice, PluginChoice, TemplateChoice};
 use crate::config::ProjectConfig;
 use crate::error::{NovaError, Result};
 use crate::plugins::get_plugin;
@@ -16,6 +16,10 @@ use std::path::{Path, PathBuf};
 #[folder = "templates/"]
 pub struct Templates;
 
+#[derive(RustEmbed)]
+#[folder = "templates_shared/"]
+pub struct SharedTemplates;
+
 #[derive(Debug, Clone)]
 pub struct ScaffoldConfig {
     pub project_name: String,
@@ -24,6 +28,7 @@ pub struct ScaffoldConfig {
     pub plugins: Vec<PluginChoice>,
     pub dry_run: bool,
     pub skip_hooks: bool,
+    pub template: TemplateChoice,
 }
 
 pub struct ScaffoldEngine;
@@ -75,11 +80,43 @@ impl ScaffoldEngine {
         // 2. Render base template files
         let mut files: HashMap<String, String> = HashMap::new();
 
+        // Render shared template files (templates_shared)
+        for file in SharedTemplates::iter() {
+            let path_str = file.as_ref();
+            // Remove the .jinja suffix to get the target file path
+            let target_path = path_str
+                .strip_suffix(".jinja")
+                .unwrap_or(path_str);
+
+            let raw = SharedTemplates::get(path_str).ok_or_else(|| {
+                NovaError::Other(format!("Embedded shared template not found: {}", path_str))
+            })?;
+
+            let template_text = std::str::from_utf8(raw.data.as_ref()).map_err(|e| {
+                NovaError::Other(format!("Invalid UTF-8 in shared template '{}': {}", path_str, e))
+            })?;
+
+            let rendered = env.render_str(template_text, &ctx).map_err(|e| NovaError::TemplateRender {
+                template: path_str.to_string(),
+                source: e,
+            })?;
+
+            files.insert(target_path.to_string(), rendered);
+        }
+
+        // 3. Render template‑specific files based on selected archetype
+        let template_dir = match config.template {
+            TemplateChoice::Rest => "templates/rest/",
+            TemplateChoice::Htmx => "templates/htmx/",
+            TemplateChoice::Grpc => "templates/grpc/",
+            TemplateChoice::Realtime => "templates/realtime/",
+            TemplateChoice::Minimal => "templates/minimal/",
+        };
         for file in Templates::iter() {
             let path_str = file.as_ref();
-            if path_str.starts_with("base/") {
+            if path_str.starts_with(template_dir) {
                 let target_path = path_str
-                    .strip_prefix("base/")
+                    .strip_prefix(template_dir)
                     .unwrap_or(path_str)
                     .strip_suffix(".jinja")
                     .unwrap_or(path_str);
@@ -92,12 +129,11 @@ impl ScaffoldEngine {
                     NovaError::Other(format!("Invalid UTF-8 in template '{}': {}", path_str, e))
                 })?;
 
-                let rendered =
-                    env.render_str(template_text, &ctx)
-                        .map_err(|e| NovaError::TemplateRender {
-                            template: path_str.to_string(),
-                            source: e,
-                        })?;
+                let rendered = env.render_str(template_text, &ctx)
+                    .map_err(|e| NovaError::TemplateRender {
+                        template: path_str.to_string(),
+                        source: e,
+                    })?;
 
                 files.insert(target_path.to_string(), rendered);
             }

@@ -1,4 +1,4 @@
-use novastack_core::cli::{DbChoice, PluginChoice};
+use novastack_core::cli::{DbChoice, PluginChoice, TemplateChoice};
 use novastack_core::config::ProjectConfig;
 use novastack_core::scaffold::{ScaffoldConfig, ScaffoldEngine};
 use std::process::Command;
@@ -16,6 +16,7 @@ fn test_scaffold_creates_files() {
         plugins: vec![PluginChoice::Auth],
         dry_run: false,
         skip_hooks: true,
+        template: TemplateChoice::Rest,
     };
 
     ScaffoldEngine::execute(&config).expect("Scaffolding should succeed");
@@ -62,6 +63,7 @@ fn test_scaffold_stateless_structure() {
         plugins: vec![],
         dry_run: false,
         skip_hooks: true,
+        template: TemplateChoice::Rest,
     };
 
     ScaffoldEngine::execute(&config).expect("Scaffolding should succeed");

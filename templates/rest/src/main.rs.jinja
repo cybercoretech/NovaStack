@@ -1,0 +1,62 @@
+use {{ project_name_snake }}::config::Config;
+use {{ project_name_snake }}::router::create_app;
+use {{ project_name_snake }}::state::AppState;
+use tracing::info;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. Structured JSON logging
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,tower_http=debug,sqlx=warn".into()),
+        )
+        .with(tracing_subscriber::fmt::layer().json())
+        .init();
+
+    info!("Starting {{ project_name }} initialization...");
+
+    // 2. Load configuration & initialize application state
+    let config = Config::from_env()?;
+    let state = AppState::new(&config).await?;
+
+    // 3. Assemble router and middleware
+    let app = create_app(state);
+
+    // 4. Bind listener and serve with graceful shutdown
+    let addr = format!("{}:{}", config.host, config.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    info!("🚀 Server running on http://{}", addr);
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    info!("Server shutdown cleanly.");
+    Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C signal handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => info!("Received SIGINT (Ctrl+C), initiating shutdown"),
+        _ = terminate => info!("Received SIGTERM, initiating shutdown"),
+    }
+}

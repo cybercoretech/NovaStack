@@ -48,6 +48,6 @@ fn test_scaffold_dry_run() {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("[DRY RUN MODE]"))
-        .stdout(predicate::str::contains("Cargo.toml"))
-        .stdout(predicate::str::contains("src/main.rs"));
+        .stdout(predicate::str::contains("src/auth/jwt.rs"))
+        .stdout(predicate::str::contains("src/telemetry.rs"));
 }

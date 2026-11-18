@@ -1,0 +1,58 @@
+# {{ project_name }}
+
+> Production-ready Rust backend scaffolded with [NovaStack](https://github.com/cybercore/novastack).
+
+---
+
+## Getting Started
+
+### 1. Environment Setup
+```bash
+cp .env.example .env
+```
+
+{% if db == "postgres" %}
+### 2. Start PostgreSQL
+```bash
+docker compose up -d db
+```
+{% endif %}
+
+### 3. Run Application
+```bash
+cargo run
+```
+
+Server binds to `http://localhost:8080`.
+
+### 4. Health Check
+```bash
+curl http://localhost:8080/health
+```
+Response:
+```json
+{
+  "status": "ok",
+  "version": "0.1.0"
+}
+```
+
+---
+
+## Project Structure
+
+```text
+├── Cargo.toml
+├── Dockerfile
+├── docker-compose.yml
+├── Justfile
+├── src/
+│   ├── config.rs        # Strongly typed environment configuration
+│   ├── error.rs         # Centralized IntoResponse error mapping
+│   ├── handlers/        # Axum request handlers
+│   ├── middleware/      # Tower middleware layers
+│   ├── router.rs        # Route definitions & grouping
+│   ├── state.rs         # Shared application state (AppState)
+│   ├── lib.rs           # Core application library
+│   └── main.rs          # Server entrypoint & graceful shutdown
+```
