@@ -6,27 +6,24 @@ NovaStack (`novastack`) eliminates days of repetitive wiring boilerplate by gene
 
 ## Build Templates
 
-NovaStack now supports multiple build templates (archetypes) to scaffold different kinds of Rust web backends.
+Pick an archetype with `-t` / `--template` (default `rest`). Every archetype shares the same base (config, error handling, tracing, graceful shutdown, Docker), and plugins plus `novastack generate` work with all of them.
 
-| Template | Description |
-|----------|-------------|
-| `rest` | Production REST API with OpenAPI/Swagger UI (default) |
-| `htmx` | Full‑stack SSR using Askama templates, HTMX, and Tailwind |
-| `grpc` | High‑throughput gRPC microservice built with Tonic |
-| `realtime` | WebSocket & Server‑Sent Events streaming service |
-| `minimal` | Bare‑bones nano‑service for ultra‑fast compile times |
+| Template | What you get |
+|----------|--------------|
+| `rest` | JSON API with an OpenAPI spec ([utoipa](https://docs.rs/utoipa)), Swagger UI at `/docs`, and an example `/api/items` CRUD resource |
+| `htmx` | Server-rendered UI: [Askama](https://docs.rs/askama) templates, HTMX fragment swaps, Tailwind (browser CDN build, for development) |
+| `grpc` | [Tonic](https://docs.rs/tonic) gRPC service from a `.proto` file (bundled `protoc`), gRPC health and reflection, on the same port as HTTP |
+| `realtime` | WebSocket `/ws`, Server-Sent Events `/events` and `POST /publish`, fed by a broadcast hub in `AppState`, plus a demo page |
+| `minimal` | Bare Axum service with a trimmed dependency set |
 
-**Example usage**:
+Each generated project includes tests for its archetype (`cargo test`).
+
 ```bash
-# Default (REST) template
-novastack new my-api
-
-# Choose a specific template
+novastack new my-api                 # rest
 novastack new my-app -t htmx
 novastack new my-service -t grpc
+novastack list                       # templates, plugins and databases
 ```
-
-See `novastack new --help` for the full list of options.
 
 
 ## Features
@@ -42,61 +39,11 @@ See `novastack new --help` for the full list of options.
   - **Redis Cache**: Connection pooling and caching layers with `deadpool-redis`.
   - **Background Workers**: Task queues and background job supervisors.
 
-## Build Templates
-
-NovaStack now supports multiple build templates (archetypes) to scaffold different kinds of Rust web backends.
-
-| Template | Description |
-|----------|-------------|
-| `rest` | Production REST API with OpenAPI/Swagger UI (default) |
-| `htmx` | Full‑stack SSR using Askama templates, HTMX, and Tailwind |
-| `grpc` | High‑throughput gRPC microservice built with Tonic |
-| `realtime` | WebSocket & Server‑Sent Events streaming service |
-| `minimal` | Bare‑bones nano‑service for ultra‑fast compile times |
-
-**Example usage**:
-```bash
-# Default (REST) template
-novastack new my-api
-
-# Choose a specific template
-novastack new my-app -t htmx
-novastack new my-service -t grpc
-```
-
-See `novastack new --help` for the full list of options.
-
-
 ## Installation
 
 ```bash
 cargo install novastack
 ```
-
-## Build Templates
-
-NovaStack now supports multiple build templates (archetypes) to scaffold different kinds of Rust web backends.
-
-| Template | Description |
-|----------|-------------|
-| `rest` | Production REST API with OpenAPI/Swagger UI (default) |
-| `htmx` | Full‑stack SSR using Askama templates, HTMX, and Tailwind |
-| `grpc` | High‑throughput gRPC microservice built with Tonic |
-| `realtime` | WebSocket & Server‑Sent Events streaming service |
-| `minimal` | Bare‑bones nano‑service for ultra‑fast compile times |
-
-**Example usage**:
-```bash
-# Default (REST) template
-novastack new my-api
-
-# Choose a specific template
-novastack new my-app -t htmx
-novastack new my-service -t grpc
-```
-
-See `novastack new --help` for the full list of options.
-
 
 ## Quick Start
 
@@ -122,31 +69,6 @@ cargo run
 ```bash
 novastack add redis
 ```
-
-## Build Templates
-
-NovaStack now supports multiple build templates (archetypes) to scaffold different kinds of Rust web backends.
-
-| Template | Description |
-|----------|-------------|
-| `rest` | Production REST API with OpenAPI/Swagger UI (default) |
-| `htmx` | Full‑stack SSR using Askama templates, HTMX, and Tailwind |
-| `grpc` | High‑throughput gRPC microservice built with Tonic |
-| `realtime` | WebSocket & Server‑Sent Events streaming service |
-| `minimal` | Bare‑bones nano‑service for ultra‑fast compile times |
-
-**Example usage**:
-```bash
-# Default (REST) template
-novastack new my-api
-
-# Choose a specific template
-novastack new my-app -t htmx
-novastack new my-service -t grpc
-```
-
-See `novastack new --help` for the full list of options.
-
 
 ## License
 
