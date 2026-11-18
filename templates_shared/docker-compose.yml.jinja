@@ -5,6 +5,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    # Secrets and settings from .env (cp .env.example .env); the values below override
+    # it with in-container addresses.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - HOST=0.0.0.0
       - PORT=8080

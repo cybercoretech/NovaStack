@@ -67,6 +67,7 @@ fn test_dry_run_includes_dotfiles_and_skips_db_when_none() {
         .success()
         .stdout(predicate::str::contains(".env.example"))
         .stdout(predicate::str::contains(".gitignore"))
+        .stdout(predicate::str::contains(".dockerignore"))
         .stdout(predicate::str::contains("src/db/").not())
         .stdout(predicate::str::contains("generate/").not());
 }

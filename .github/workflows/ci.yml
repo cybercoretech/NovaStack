@@ -1,0 +1,151 @@
+name: CI
+
+# NovaStack's own checks plus the generated-project compile matrix
+# (tests/generated_compile.rs): every archetype, database and plugin combination must
+# build clean under `clippy -D warnings` and pass its own tests.
+#
+# Generated projects have no lockfile, so a new crate release can break them without
+# any change here. The weekly run catches that drift.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Must match `rust-version` in Cargo.toml and GENERATED_RUST_VERSION in
+  # src/scaffold/engine.rs.
+  MSRV: "1.88"
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo clippy --all-targets --locked -- -D warnings
+
+  test:
+    name: test (stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo test --locked
+
+  msrv:
+    name: test (MSRV 1.88)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.MSRV }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo test --locked
+
+  deny:
+    name: cargo-deny (advisories, licenses, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories licenses sources
+
+  generated:
+    name: generated projects (${{ matrix.shard }}, ${{ matrix.toolchain }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: base + plugins
+            toolchain: stable
+            tests: >-
+              gen_no_db_no_plugins gen_postgres_no_plugins gen_sqlite_no_plugins
+              gen_each_plugin_alone gen_postgres_all_plugins gen_sqlite_all_plugins
+              gen_add_plugins_and_generate_components
+          - shard: htmx + realtime
+            toolchain: stable
+            tests: gen_htmx_archetype gen_realtime_archetype
+          - shard: grpc
+            toolchain: stable
+            tests: gen_grpc_archetype
+          - shard: minimal
+            toolchain: stable
+            tests: gen_minimal_archetype gen_minimal_add_plugins_and_generate_components
+          # Every archetype with sqlite + all plugins on the pinned MSRV
+          - shard: archetypes
+            toolchain: "1.88"
+            tests: >-
+              gen_sqlite_all_plugins gen_htmx_archetype gen_grpc_archetype
+              gen_realtime_archetype gen_minimal_archetype
+    env:
+      # Generated projects are built by `cargo` subprocesses; this makes them use the
+      # same toolchain as the job.
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: generated-${{ matrix.shard }}-${{ matrix.toolchain }}
+          # Dependencies of the generated projects (shared target dir of the matrix)
+          cache-directories: target/tmp/generated-check
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Compile matrix
+        run: cargo test --locked --test generated_compile -- --ignored --exact ${{ matrix.tests }}
+
+  docker-smoke:
+    name: docker smoke (generated projects)
+    # Image builds are slow; run on main, weekly and on demand rather than every PR.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build novastack
+        run: cargo build --locked --release
+      - name: Smoke-test generated projects in Docker
+        run: ./scripts/docker-smoke.sh "$PWD/target/release/novastack" "$RUNNER_TEMP/smoke"
