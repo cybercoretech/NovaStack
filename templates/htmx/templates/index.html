@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="mb-2 text-3xl font-bold">{{ title }}</h1>
+<p class="mb-8 text-slate-600">Server-rendered with Askama, updated in place with HTMX.</p>
+
+<form class="mb-6 flex gap-2"
+      hx-post="/todos"
+      hx-target="#todo-list"
+      hx-swap="beforeend"
+      hx-on::after-request="if (event.detail.successful) this.reset()">
+  <label for="title" class="sr-only">New todo</label>
+  <input id="title" name="title" required maxlength="200" placeholder="What needs doing?"
+         class="flex-1 rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+  <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700">
+    Add
+  </button>
+</form>
+
+<ul id="todo-list" class="space-y-2">
+  {% for todo in todos %}
+    {% include "partials/todo.html" %}
+  {% endfor %}
+</ul>
+{% endblock %}

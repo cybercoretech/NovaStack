@@ -18,6 +18,7 @@ impl AnchorPatcher {
     pub const CONFIG_INIT_ANCHOR: &'static str = "// NOVASTACK:CONFIG_INIT";
     pub const STARTUP_ANCHOR: &'static str = "// NOVASTACK:STARTUP";
     pub const DEPS_ANCHOR: &'static str = "# NOVASTACK:DEPENDENCIES";
+    pub const DEV_DEPS_ANCHOR: &'static str = "# NOVASTACK:DEV_DEPENDENCIES";
     pub const ENV_ANCHOR: &'static str = "# NOVASTACK:ENV";
     pub const IMPORTS_ANCHOR: &'static str = "// NOVASTACK:IMPORTS";
 
@@ -82,6 +83,22 @@ impl AnchorPatcher {
         if let Some(content) = files.get_mut(path) {
             *content = Self::inject_before(content, anchor, insertion);
         }
+    }
+
+    /// Appends `text` to the end of a required file (e.g. a new `[build-dependencies]` table).
+    pub fn append(files: &mut HashMap<String, String>, path: &str, text: &str) -> Result<()> {
+        let content = files.get_mut(path).ok_or_else(|| {
+            NovaError::Other(format!(
+                "Required file '{}' is missing from the project",
+                path
+            ))
+        })?;
+        if !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push('\n');
+        content.push_str(text);
+        Ok(())
     }
 
     /// Appends dependencies or lines to a file if an anchor is found, or appends to end

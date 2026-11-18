@@ -110,3 +110,40 @@ fn test_add_plugin_patches_config_and_state() {
     // Installing twice is rejected
     assert!(ScaffoldEngine::add_plugin(&target_dir, PluginChoice::Auth).is_err());
 }
+
+#[test]
+fn test_archetype_is_recorded_and_raw_files_are_copied_verbatim() {
+    let temp_dir = tempdir().unwrap();
+    let target_dir = temp_dir.path().join("ui-app");
+
+    ScaffoldEngine::execute(&ScaffoldConfig {
+        project_name: "ui-app".to_string(),
+        target_dir: target_dir.clone(),
+        db: DbChoice::None,
+        plugins: vec![],
+        dry_run: false,
+        skip_hooks: true,
+        template: TemplateChoice::Htmx,
+    })
+    .unwrap();
+
+    let cfg = ProjectConfig::load(&target_dir).unwrap();
+    assert_eq!(cfg.template, TemplateChoice::Htmx);
+
+    // Askama syntax must survive untouched (not rendered by the scaffolder)
+    let page = std::fs::read_to_string(target_dir.join("templates/index.html")).unwrap();
+    assert!(page.contains("{% extends \"base.html\" %}"));
+    assert!(page.contains("{{ title }}"));
+}
+
+#[test]
+fn test_config_without_template_defaults_to_rest() {
+    let temp_dir = tempdir().unwrap();
+    std::fs::write(
+        temp_dir.path().join("novastack.toml"),
+        "name = \"old\"\ndb = \"none\"\nplugins = []\ncreated_at = \"x\"\nnovastack_version = \"0.1.0\"\n",
+    )
+    .unwrap();
+    let cfg = ProjectConfig::load(temp_dir.path()).unwrap();
+    assert_eq!(cfg.template, TemplateChoice::Rest);
+}

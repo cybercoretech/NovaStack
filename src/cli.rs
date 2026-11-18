@@ -98,10 +98,11 @@ pub enum GenerateKind {
     Middleware,
 }
 
-#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TemplateChoice {
     /// Production REST API with OpenAPI/Swagger UI docs (utoipa)
+    #[default]
     Rest,
     /// Full-stack SSR with Askama templates, HTMX 2.0 & Tailwind CSS
     Htmx,
@@ -111,6 +112,19 @@ pub enum TemplateChoice {
     Realtime,
     /// Minimalist barebones nano-service with fast compile times
     Minimal,
+}
+
+impl TemplateChoice {
+    /// The archetype's CLI / `novastack.toml` name.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TemplateChoice::Rest => "rest",
+            TemplateChoice::Htmx => "htmx",
+            TemplateChoice::Grpc => "grpc",
+            TemplateChoice::Realtime => "realtime",
+            TemplateChoice::Minimal => "minimal",
+        }
+    }
 }
 
 impl fmt::Display for TemplateChoice {

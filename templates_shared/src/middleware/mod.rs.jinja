@@ -1,28 +1,40 @@
 use axum::{http::StatusCode, Router};
 use std::time::Duration;
+{% if template == "minimal" %}
+use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+{% else %}
 use tower_http::{
     cors::{Any, CorsLayer},
     timeout::TimeoutLayer,
     trace::TraceLayer,
 };
+{% endif %}
 
 // NOVASTACK:MIDDLEWARE
 
+{% if template == "minimal" %}
+/// Applies the global middleware stack (tracing, request timeout) to every route.
+{% else %}
 /// Applies the global middleware stack (tracing, CORS, request timeout) to every route.
+{% endif %}
 pub fn apply<S>(router: Router<S>) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
+{% if template != "minimal" %}
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
+{% endif %}
     router
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
             Duration::from_secs(30),
         ))
+{% if template != "minimal" %}
         .layer(cors)
+{% endif %}
         .layer(TraceLayer::new_for_http())
 }

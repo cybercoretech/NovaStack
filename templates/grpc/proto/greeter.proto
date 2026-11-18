@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package greeter.v1;
+
+// Example service. Add your RPCs here; `build.rs` regenerates the Rust code on build.
+service Greeter {
+  rpc SayHello(HelloRequest) returns (HelloReply);
+}
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}

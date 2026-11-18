@@ -1,4 +1,4 @@
-use crate::cli::{DbChoice, PluginChoice};
+use crate::cli::{DbChoice, PluginChoice, TemplateChoice};
 use crate::error::{NovaError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -12,6 +12,10 @@ pub struct ProjectConfig {
     pub name: String,
     pub db: DbChoice,
     pub plugins: HashSet<PluginChoice>,
+    /// Build archetype the project was scaffolded with (projects created before this field
+    /// existed were all REST).
+    #[serde(default)]
+    pub template: TemplateChoice,
     pub created_at: String,
     pub novastack_version: String,
 }
@@ -22,9 +26,16 @@ impl ProjectConfig {
             name,
             db,
             plugins: plugins.into_iter().collect(),
+            template: TemplateChoice::default(),
             created_at: chrono_now_string(),
             novastack_version: env!("CARGO_PKG_VERSION").to_string(),
         }
+    }
+
+    /// Sets the build archetype recorded for this project.
+    pub fn with_template(mut self, template: TemplateChoice) -> Self {
+        self.template = template;
+        self
     }
 
     pub fn load(project_dir: &Path) -> Result<Self> {

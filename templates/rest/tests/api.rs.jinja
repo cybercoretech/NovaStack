@@ -1,0 +1,66 @@
+use axum::{
+    body::Body,
+    http::{header, Method, Request, StatusCode},
+    Router,
+};
+use http_body_util::BodyExt;
+use serde_json::{json, Value};
+use tower::ServiceExt;
+
+async fn call(app: &Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
+    let mut request = Request::builder().method(method).uri(uri);
+    let body = match body {
+        Some(json) => {
+            request = request.header(header::CONTENT_TYPE, "application/json");
+            Body::from(json.to_string())
+        }
+        None => Body::empty(),
+    };
+    let response = app
+        .clone()
+        .oneshot(request.body(body).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, value)
+}
+
+#[tokio::test]
+async fn items_crud_round_trip() {
+    let app: Router = {{ project_name_snake }}::api::routes();
+
+    let (status, created) = call(&app, Method::POST, "/api/items", Some(json!({"name": "Widget"}))).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = created["id"].as_u64().unwrap();
+
+    let (status, list) = call(&app, Method::GET, "/api/items", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list.as_array().unwrap().len(), 1);
+
+    let uri = format!("/api/items/{id}");
+    let (status, updated) = call(&app, Method::PUT, &uri, Some(json!({"name": "Gadget"}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated["name"], "Gadget");
+
+    let (status, _) = call(&app, Method::DELETE, &uri, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = call(&app, Method::GET, &uri, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn rejects_blank_names() {
+    let app: Router = {{ project_name_snake }}::api::routes();
+    let (status, _) = call(&app, Method::POST, "/api/items", Some(json!({"name": "  "}))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn serves_openapi_spec() {
+    let app: Router = {{ project_name_snake }}::api::routes();
+    let (status, spec) = call(&app, Method::GET, "/api-docs/openapi.json", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(spec["paths"]["/api/items/{id}"].is_object());
+}

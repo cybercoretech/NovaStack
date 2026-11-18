@@ -1,0 +1,62 @@
+//! gRPC services, served through the Axum router on the same port as HTTP.
+
+use axum::Router;
+use tonic::{Request, Response, Status};
+
+/// Code generated from `proto/greeter.proto` by `build.rs`.
+#[allow(clippy::all, clippy::pedantic)]
+pub mod proto {
+    tonic::include_proto!("greeter.v1");
+
+    pub const FILE_DESCRIPTOR_SET: &[u8] =
+        tonic::include_file_descriptor_set!("greeter_descriptor");
+}
+
+use proto::greeter_server::{Greeter, GreeterServer};
+use proto::{HelloReply, HelloRequest};
+
+#[derive(Debug, Default)]
+pub struct GreeterService;
+
+#[tonic::async_trait]
+impl Greeter for GreeterService {
+    async fn say_hello(
+        &self,
+        request: Request<HelloRequest>,
+    ) -> Result<Response<HelloReply>, Status> {
+        let name = request.into_inner().name;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(Status::invalid_argument("name must not be empty"));
+        }
+        Ok(Response::new(HelloReply {
+            message: format!("Hello, {name}!"),
+        }))
+    }
+}
+
+/// All gRPC services (Greeter, grpc.health.v1 and server reflection) as Axum routes.
+pub fn routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    // The overall server status ("") starts as SERVING.
+    let (_health_reporter, health_service) = tonic_health::server::health_reporter();
+
+    let mut builder = tonic::service::RoutesBuilder::default();
+    builder
+        .add_service(health_service)
+        .add_service(GreeterServer::new(GreeterService));
+
+    match tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
+        .build_v1()
+    {
+        Ok(reflection) => {
+            builder.add_service(reflection);
+        }
+        Err(err) => tracing::warn!(error = %err, "gRPC reflection disabled"),
+    }
+
+    builder.routes().into_axum_router().with_state(())
+}

@@ -7,10 +7,20 @@ resolver = "3"
 
 [dependencies]
 # HTTP & Networking
+{% if template == "realtime" %}
+axum = { version = "0.8", features = ["macros", "ws"] }
+{% elif template == "grpc" %}
+axum = { version = "0.8", features = ["macros", "http2"] }
+{% else %}
 axum = { version = "0.8", features = ["macros"] }
+{% endif %}
+{% if template == "minimal" %}
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tower-http = { version = "0.6", features = ["trace", "timeout"] }
+{% else %}
 tokio = { version = "1.40", features = ["full"] }
-tower = { version = "0.5", features = ["timeout", "limit"] }
 tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip", "request-id", "timeout"] }
+{% endif %}
 
 # Database & Pooling
 {% if db == "postgres" %}
@@ -29,7 +39,12 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 thiserror = "2.0"
 anyhow = "1.0"
+{% if template != "minimal" %}
 uuid = { version = "1.10", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+{% endif %}
 
 # NOVASTACK:DEPENDENCIES
+
+[dev-dependencies]
+# NOVASTACK:DEV_DEPENDENCIES

@@ -1,0 +1,174 @@
+//! Example CRUD resource.
+//!
+//! Items live in memory (`ItemStore`) so the example works with every database choice.
+//! Swap the store for SQLx queries against `AppState::db` when you build real resources.
+
+use crate::error::AppError;
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    routing::get,
+    Json, Router,
+};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use utoipa::ToSchema;
+
+const MAX_NAME_LEN: usize = 200;
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct Item {
+    pub id: u64,
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct NewItem {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Default)]
+struct Store {
+    next_id: u64,
+    items: BTreeMap<u64, Item>,
+}
+
+/// Shared in-memory item storage.
+#[derive(Clone, Default)]
+pub struct ItemStore {
+    inner: Arc<RwLock<Store>>,
+}
+
+pub fn router<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new()
+        .route("/", get(list_items).post(create_item))
+        .route("/{id}", get(get_item).put(update_item).delete(delete_item))
+        .with_state(ItemStore::default())
+}
+
+fn validate(input: &NewItem) -> Result<(), AppError> {
+    let name = input.name.trim();
+    if name.is_empty() {
+        return Err(AppError::Validation("name must not be empty".into()));
+    }
+    if name.chars().count() > MAX_NAME_LEN {
+        return Err(AppError::Validation(format!(
+            "name must be at most {MAX_NAME_LEN} characters"
+        )));
+    }
+    Ok(())
+}
+
+/// List all items.
+#[utoipa::path(
+    get,
+    path = "/api/items",
+    tag = "items",
+    responses((status = 200, description = "All items", body = [Item]))
+)]
+pub async fn list_items(State(store): State<ItemStore>) -> Json<Vec<Item>> {
+    let store = store.inner.read().await;
+    Json(store.items.values().cloned().collect())
+}
+
+/// Create an item.
+#[utoipa::path(
+    post,
+    path = "/api/items",
+    tag = "items",
+    request_body = NewItem,
+    responses(
+        (status = 201, description = "Item created", body = Item),
+        (status = 422, description = "Invalid input")
+    )
+)]
+pub async fn create_item(
+    State(store): State<ItemStore>,
+    Json(input): Json<NewItem>,
+) -> Result<(StatusCode, Json<Item>), AppError> {
+    validate(&input)?;
+    let mut store = store.inner.write().await;
+    store.next_id += 1;
+    let item = Item {
+        id: store.next_id,
+        name: input.name.trim().to_string(),
+        description: input.description,
+    };
+    store.items.insert(item.id, item.clone());
+    Ok((StatusCode::CREATED, Json(item)))
+}
+
+/// Fetch one item.
+#[utoipa::path(
+    get,
+    path = "/api/items/{id}",
+    tag = "items",
+    params(("id" = u64, Path, description = "Item id")),
+    responses(
+        (status = 200, description = "The item", body = Item),
+        (status = 404, description = "No such item")
+    )
+)]
+pub async fn get_item(
+    State(store): State<ItemStore>,
+    Path(id): Path<u64>,
+) -> Result<Json<Item>, AppError> {
+    let store = store.inner.read().await;
+    store.items.get(&id).cloned().map(Json).ok_or(AppError::NotFound)
+}
+
+/// Replace an item.
+#[utoipa::path(
+    put,
+    path = "/api/items/{id}",
+    tag = "items",
+    params(("id" = u64, Path, description = "Item id")),
+    request_body = NewItem,
+    responses(
+        (status = 200, description = "Item updated", body = Item),
+        (status = 404, description = "No such item"),
+        (status = 422, description = "Invalid input")
+    )
+)]
+pub async fn update_item(
+    State(store): State<ItemStore>,
+    Path(id): Path<u64>,
+    Json(input): Json<NewItem>,
+) -> Result<Json<Item>, AppError> {
+    validate(&input)?;
+    let mut store = store.inner.write().await;
+    let item = store.items.get_mut(&id).ok_or(AppError::NotFound)?;
+    item.name = input.name.trim().to_string();
+    item.description = input.description;
+    Ok(Json(item.clone()))
+}
+
+/// Delete an item.
+#[utoipa::path(
+    delete,
+    path = "/api/items/{id}",
+    tag = "items",
+    params(("id" = u64, Path, description = "Item id")),
+    responses(
+        (status = 204, description = "Item deleted"),
+        (status = 404, description = "No such item")
+    )
+)]
+pub async fn delete_item(
+    State(store): State<ItemStore>,
+    Path(id): Path<u64>,
+) -> Result<StatusCode, AppError> {
+    let mut store = store.inner.write().await;
+    store
+        .items
+        .remove(&id)
+        .map(|_| StatusCode::NO_CONTENT)
+        .ok_or(AppError::NotFound)
+}

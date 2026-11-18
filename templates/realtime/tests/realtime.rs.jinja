@@ -1,0 +1,65 @@
+use axum::{
+    body::Body,
+    http::{header, Method, Request, StatusCode},
+    Router,
+};
+use futures_util::{SinkExt, StreamExt};
+use std::time::Duration;
+use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tower::ServiceExt;
+use {{ project_name_snake }}::realtime::{routes, Hub};
+
+#[tokio::test]
+async fn websocket_messages_reach_every_client() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app: Router = routes(Hub::default());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+    let url = format!("ws://{addr}/ws");
+    let (mut alice, _) = connect_async(&url).await.unwrap();
+    let (mut bob, _) = connect_async(&url).await.unwrap();
+    // Let both server-side subscriptions register before publishing.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    alice.send(Message::text("hello from alice")).await.unwrap();
+
+    let received = tokio::time::timeout(Duration::from_secs(5), bob.next())
+        .await
+        .expect("bob should receive the broadcast")
+        .unwrap()
+        .unwrap();
+    assert_eq!(received.into_text().unwrap().as_str(), "hello from alice");
+}
+
+#[tokio::test]
+async fn publish_and_events_endpoints() {
+    let hub = Hub::default();
+    let app: Router = routes(hub.clone());
+    let mut rx = hub.subscribe();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/publish")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"message":"ping"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(rx.recv().await.unwrap(), "ping");
+
+    let response = app
+        .oneshot(Request::builder().uri("/events").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[header::CONTENT_TYPE],
+        "text/event-stream"
+    );
+}

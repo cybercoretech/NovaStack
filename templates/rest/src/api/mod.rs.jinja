@@ -1,0 +1,33 @@
+//! JSON API: routes, OpenAPI document and Swagger UI.
+
+pub mod items;
+
+use axum::Router;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+/// OpenAPI document. Add new handlers to `paths(...)` and their types to `schemas(...)`.
+#[derive(OpenApi)]
+#[openapi(
+    info(title = "{{ project_name }}", version = "0.1.0"),
+    paths(
+        items::list_items,
+        items::create_item,
+        items::get_item,
+        items::update_item,
+        items::delete_item
+    ),
+    components(schemas(items::Item, items::NewItem)),
+    tags((name = "items", description = "Example in-memory resource"))
+)]
+pub struct ApiDoc;
+
+/// API routes plus Swagger UI at `/docs` and the spec at `/api-docs/openapi.json`.
+pub fn routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new()
+        .nest("/api/items", items::router())
+        .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()))
+}

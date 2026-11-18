@@ -1,0 +1,10 @@
+<li class="flex items-center justify-between rounded-md bg-white px-4 py-3 shadow-sm">
+  <span>{{ todo.title }}</span>
+  <button class="text-sm text-slate-500 hover:text-red-600"
+          hx-delete="/todos/{{ todo.id }}"
+          hx-target="closest li"
+          hx-swap="outerHTML"
+          aria-label="Delete {{ todo.title }}">
+    Delete
+  </button>
+</li>
