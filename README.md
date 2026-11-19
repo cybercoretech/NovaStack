@@ -1,5 +1,6 @@
 # NovaStack ⚡
 
+[![Crates.io](https://img.shields.io/crates/v/novastack.svg)](https://crates.io/crates/novastack)
 [![CI](https://github.com/cybercoretech/NovaStack/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/cybercoretech/NovaStack/actions/workflows/ci.yml)
 [![Site](https://img.shields.io/badge/site-novastack--rs.pages.dev-ff9a3c)](https://novastack-rs.pages.dev)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-9b6bff)](#-license)
@@ -52,7 +53,13 @@ Names are snake_cased. Rust keywords, built-in module names and existing compone
 
 ## 📦 Installation
 
-Requires **Rust 1.88** or newer. NovaStack isn't on crates.io yet; install it from the repository:
+Requires **Rust 1.88** or newer.
+
+```bash
+cargo install novastack
+```
+
+Or the latest unreleased version from the repository:
 
 ```bash
 cargo install --git https://github.com/cybercoretech/NovaStack
@@ -119,7 +126,7 @@ site/tools/build.sh /tmp/novastack-site && python3 -m http.server -d /tmp/novast
 
 ## 🗺️ Status
 
-NovaStack is early (v0.1.0). Not there yet: crates.io releases, OpenTelemetry trace export, gRPC and WebSocket authentication, and database-backed versions of the example resources.
+NovaStack is early (v0.1.0; see the [changelog](CHANGELOG.md)). Not there yet: OpenTelemetry trace export, gRPC and WebSocket authentication, and database-backed versions of the example resources.
 
 ## 📜 License
 
