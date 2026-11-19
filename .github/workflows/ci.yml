@@ -133,12 +133,42 @@ jobs:
       - name: Compile matrix
         run: cargo test --locked --test generated_compile -- --ignored --exact ${{ matrix.tests }}
 
+  cross-platform:
+    name: ${{ matrix.os }} (tests + generated projects)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cross-${{ matrix.os }}
+          cache-directories: target/tmp/generated-check
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: NovaStack tests
+        run: cargo test --locked
+      # sqlite + every plugin (SQLx, auth, metrics, redis, workers), grpc (build.rs with the
+      # bundled protoc) and htmx (Askama template paths) on this OS
+      - name: Generated projects
+        run: cargo test --locked --test generated_compile -- --ignored --exact gen_sqlite_all_plugins gen_grpc_archetype gen_htmx_archetype
+
   docker-smoke:
-    name: docker smoke (generated projects)
+    name: docker smoke (${{ matrix.scenario }})
     # Image builds are slow; run on main, weekly and on demand rather than every PR.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # One per template; see scripts/docker-smoke.sh for what each checks.
+        scenario: [rest, grpc, htmx, realtime, minimal]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -147,5 +177,5 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build novastack
         run: cargo build --locked --release
-      - name: Smoke-test generated projects in Docker
-        run: ./scripts/docker-smoke.sh "$PWD/target/release/novastack" "$RUNNER_TEMP/smoke"
+      - name: Smoke-test the generated project in Docker
+        run: ./scripts/docker-smoke.sh "$PWD/target/release/novastack" "$RUNNER_TEMP/smoke" ${{ matrix.scenario }}

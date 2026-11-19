@@ -90,27 +90,39 @@ def matrix_tests():
 
 
 def ci_jobs():
-    """CI job names, with the generated-projects matrix expanded into its shards."""
+    """CI job names, with matrix expressions expanded into the real job instances."""
     text = (ROOT / ".github/workflows/ci.yml").read_text()
-    shards = re.findall(r"- shard: (.+)\n\s+toolchain: \"?([^\"\n]+)\"?", text)
+    body = text.split("\njobs:\n", 1)[1]
     jobs = []
-    for name in re.findall(r"^    name: (.+)$", text, re.M):
-        if "${{" in name:
-            jobs.extend(f"generated projects ({s}, {t})" for s, t in shards)
-        else:
+    for block in re.split(r"\n(?=  [\w-]+:\n)", body):
+        m = re.search(r"^    name: (.+)$", block, re.M)
+        if not m:
+            continue
+        name = m.group(1).strip()
+        keys = re.findall(r"\$\{\{ matrix\.(\w+) \}\}", name)
+        if not keys:
             jobs.append(name)
+            continue
+        include = re.findall(r"- shard: (.+)\n\s+toolchain: \"?([^\"\n]+)\"?", block)
+        if include:  # include-style matrix (shard + toolchain)
+            for shard, toolchain in include:
+                jobs.append(name.replace("${{ matrix.shard }}", shard).replace("${{ matrix.toolchain }}", toolchain))
+            continue
+        lists = {k: re.search(rf"^\s+{k}: \[(.+)\]$", block, re.M) for k in keys}
+        values = [v.strip() for v in lists[keys[0]].group(1).split(",")] if lists[keys[0]] else []
+        for v in values:
+            jobs.append(name.replace(f"${{{{ matrix.{keys[0]} }}}}", v))
     return jobs
 
 
 def smoke_checks():
+    """Docker smoke scenarios (from the script's header) and the checks each one runs."""
     text = (ROOT / "scripts/docker-smoke.sh").read_text()
-    sections, current = [], None
-    for line in text.splitlines():
-        if m := re.match(r'echo "== (.+)"', line.strip()):
-            current = {"title": m.group(1), "checks": []}
-            sections.append(current)
-        elif (m := re.match(r'\s*expect "([^"]+)"', line)) and current:
-            current["checks"].append(m.group(1))
+    titles = dict(re.findall(r"^#   (\w+)\s{2,}(.+)$", text, re.M))
+    sections = []
+    for name, fn in re.findall(r"^checks_(\w+)\(\) \{\n(.*?)^\}", text, re.M | re.S):
+        checks = re.findall(r'expect "([^"]+)"', fn) + ["container healthcheck"]
+        sections.append({"title": titles.get(name, name), "checks": checks})
     return sections
 
 

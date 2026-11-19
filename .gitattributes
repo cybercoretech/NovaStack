@@ -1,0 +1,6 @@
+# Templates are embedded into the binary as-is. Keep LF on every platform so generated
+# projects are identical to those from the crates.io package (built on Linux).
+/templates/**        text eol=lf
+/templates_shared/** text eol=lf
+*.sh                 text eol=lf
+*.rs                 text eol=lf
