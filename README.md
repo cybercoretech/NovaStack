@@ -98,7 +98,15 @@ Every push and pull request runs ([`ci.yml`](.github/workflows/ci.yml)):
 
 - **NovaStack itself:** `rustfmt`, `clippy -D warnings`, tests on stable and on Rust 1.88, and `cargo-deny` (advisories, licenses, sources).
 - **Generated projects:** a compile matrix ([`tests/generated_compile.rs`](tests/generated_compile.rs)) that scaffolds every template, database and plugin combination, plus projects grown with `add` and `generate`, then runs `cargo clippy --all-targets -D warnings` and `cargo test` on each one. It runs on stable and on 1.88.
-- **Docker** (on `main`, weekly and on demand): [`scripts/docker-smoke.sh`](scripts/docker-smoke.sh) runs a Postgres + Redis + all-plugins project under `docker compose` and checks the CRUD API, Swagger UI, JWT login, metrics and the container healthcheck. It also builds and calls a gRPC image.
+- **macOS and Windows:** NovaStack's tests, plus generated projects (SQLite with every plugin, gRPC with its bundled `protoc`, HTMX) built and tested on both.
+- **Docker** (on `main`, weekly and on demand): [`scripts/docker-smoke.sh`](scripts/docker-smoke.sh) builds and runs one project per template and checks it over HTTP:
+  - `rest`: Postgres + Redis + all plugins under `docker compose`; CRUD API, Swagger UI, JWT login and protected route, metrics
+  - `grpc`: a gRPC call over HTTP/2 and HTTP health on the same port, with an SQLite data volume
+  - `htmx`: SQLite + auth under Compose; page, add/delete fragments, HTML escaping
+  - `realtime`: Redis + workers under Compose; a message published over HTTP arrives on the SSE stream, WebSocket upgrade
+  - `minimal`: health and 404 handling
+
+  Each scenario also checks the container healthcheck and reports the image size.
 
 A weekly run catches new crate releases that would break generated projects, which have no lockfile.
 
