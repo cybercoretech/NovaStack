@@ -9,12 +9,134 @@ const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-/* ---------- Editorial notes (behaviour, not counts) ---------- */
-const PLUGIN_NOTES = {
-  auth: "The generated /auth/login is a stub: it issues a token for any non-empty credentials and is marked as such. Check credentials with auth::password::verify_password before shipping. JWT_SECRET is required at startup.",
-  otel: "Serves Prometheus metrics at /metrics with per-route request counts and latency. OpenTelemetry trace export (OTLP) is not implemented yet.",
-  redis: "The pool connects lazily, so the app starts even if Redis is briefly down. `novastack add redis` on an existing project doesn't edit docker-compose.yml; it prints a reminder.",
-  workers: "Spawns the worker supervisor at startup. Queue backends (Redis, Postgres) are up to you; the Task trait is the extension point.",
+/* ---------- Plugin guides (behaviour, not counts) ----------
+   Hand-written usage notes. Every Rust snippet and shell command here was compiled /
+   run against a real generated project; files, diffs and env vars come from the data. */
+const ENV_HELP = {
+  JWT_SECRET: "Key used to sign tokens. Required: the app refuses to start without it. Use a long random value (openssl rand -hex 32).",
+  JWT_EXPIRATION_HOURS: "How long a token stays valid, in hours (default 24).",
+  REDIS_URL: "Where Redis runs. Under docker compose the app uses redis://redis:6379 automatically.",
+};
+const PLUGIN_GUIDES = {
+  auth: {
+    tagline: "Log users in with JWTs and protect routes.",
+    gets: [
+      "<code>POST /auth/login</code> returns a signed JWT.",
+      "<code>GET /auth/me</code>, an example route that requires a valid token.",
+      "An <code>AuthUser</code> extractor: add it to any handler's arguments to require login.",
+      "Argon2 helpers: <code>hash_password</code> and <code>verify_password</code>.",
+    ],
+    setup: { text: "Set a real signing secret in <code>.env</code>, then start the app:", cmd: `cp .env.example .env    # if you haven't yet
+sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env
+cargo run` },
+    tryIt: `# log in (any non-empty username/password works until you wire up a user store)
+TOKEN=$(curl -s -X POST localhost:8080/auth/login \\
+  -H 'content-type: application/json' \\
+  -d '{"username":"ada","password":"secret"}' | sed -E 's/.*"token":"([^"]+)".*/\\1/')
+
+curl localhost:8080/auth/me -H "Authorization: Bearer $TOKEN"
+# {"user_id":"ada"}
+
+curl localhost:8080/auth/me
+# {"error":{"code":401,"message":"Missing bearer token"}}`,
+    code: { title: "protect a route", lang: "rust", src: `use crate::auth::AuthUser;
+use axum::Json;
+use serde_json::{json, Value};
+
+/// Only reachable with a valid \`Authorization: Bearer <token>\` header.
+pub async fn my_orders(user: AuthUser) -> Json<Value> {
+    Json(json!({ "orders_for": user.user_id }))
+}
+
+// in router.rs: .route("/my-orders", get(my_orders))
+
+// hashing a password before storing it:
+let hash = crate::auth::password::hash_password("hunter2")?;
+let ok = crate::auth::password::verify_password("hunter2", &hash)?;` },
+    limits: "The generated /auth/login is a stub: it issues a token for any non-empty credentials. Before shipping, look the user up and check the password with verify_password. Auth guards HTTP routes only (not gRPC or WebSockets).",
+  },
+  otel: {
+    tagline: "Prometheus metrics for every route.",
+    gets: [
+      "<code>GET /metrics</code> in Prometheus text format, ready to scrape.",
+      "<code>http_requests_total</code> and <code>http_request_duration_seconds</code> for every request, by method, route and status.",
+      "The <code>metrics</code> crate set up, so your own counters and histograms show up too.",
+    ],
+    setup: { text: "Nothing to configure: the recorder starts with the app.", cmd: "cargo run" },
+    tryIt: `curl localhost:8080/health > /dev/null
+curl localhost:8080/metrics
+# http_requests_total{method="GET",path="/health",status="200"} 1
+# ...`,
+    code: { title: "record your own metrics", lang: "rust", src: `// anywhere in your code:
+metrics::counter!("orders_created_total").increment(1);
+metrics::histogram!("order_value_usd").record(42.0);` },
+    limits: "Metrics only for now: OpenTelemetry trace export (OTLP) is planned but not implemented.",
+  },
+  redis: {
+    tagline: "A Redis connection pool and cache helpers.",
+    gets: [
+      "A <code>deadpool-redis</code> pool in <code>AppState</code> as <code>state.redis</code>.",
+      "<code>cache::get</code> and <code>cache::set_ex</code> helpers.",
+      "<code>REDIS_URL</code> in the config, and a <code>redis</code> service in <code>docker-compose.yml</code> for new projects.",
+    ],
+    setup: { text: "Start Redis. New projects created with <code>--plugins redis</code> already have the Compose service. After <code>novastack add redis</code>, add this under <code>services:</code> in <code>docker-compose.yml</code> first:", cmd: `  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"`, after: "docker compose up -d redis\ncargo run" },
+    tryIt: `docker compose exec redis redis-cli ping
+# PONG`,
+    code: { title: "cache a value (cache-aside)", lang: "rust", src: `use crate::{cache, error::AppError, state::AppState};
+use axum::extract::{Path, State};
+
+pub async fn cached_greeting(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<String, AppError> {
+    let key = format!("greeting:{name}");
+    if let Some(hit) = cache::get(&state.redis, &key).await? {
+        return Ok(hit);
+    }
+    let value = format!("Hello, {name}!");
+    cache::set_ex(&state.redis, &key, &value, 60).await?;
+    Ok(value)
+}
+
+// in router.rs: .route("/greeting/{name}", get(cached_greeting))` },
+    limits: "The pool connects lazily, so the app starts even if Redis is down; the first cache call then returns an error.",
+  },
+  workers: {
+    tagline: "Run work in the background.",
+    gets: [
+      "A worker supervisor started at boot (<code>workers::start_workers</code>).",
+      "A <code>Task</code> trait: implement it for each kind of background job.",
+    ],
+    setup: { text: "Nothing to configure. Start the app and look for the supervisor in the logs:", cmd: `cargo run
+# ... "message":"Background worker supervisor started." ...` },
+    tryIt: null,
+    code: { title: "define and run a task", lang: "rust", src: `use crate::workers::tasks::Task;
+use async_trait::async_trait;
+
+pub struct SendWelcomeEmail {
+    pub to: String,
+}
+
+#[async_trait]
+impl Task for SendWelcomeEmail {
+    async fn execute(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        tracing::info!(to = %self.to, "sending welcome email");
+        Ok(())
+    }
+}
+
+// fire it off from a handler (or from start_workers):
+tokio::spawn(async move {
+    let task = SendWelcomeEmail { to: "ada@example.com".into() };
+    if let Err(err) = task.execute().await {
+        tracing::error!(error = %err, "task failed");
+    }
+});` },
+    limits: "Tasks run in-process with tokio::spawn. For durable queues (retries across restarts), back them with Redis or Postgres; the Task trait is the extension point.",
+  },
 };
 const NAV = [
   ["top", "start"], ["templates", "templates"], ["plugins", "plugins"], ["generate", "generate"],
@@ -68,9 +190,9 @@ function highlight(line, lang) {
   return out;
 }
 
-function codeLines(content, lang) {
+function codeLines(content, lang, numbered = true) {
   const lines = content.replace(/\n$/, "").split("\n");
-  return lines.map((l, n) => `<span class="line"><span class="ln">${n + 1}</span>${highlight(l, lang)}</span>`).join("");
+  return lines.map((l, n) => `<span class="line${numbered ? "" : " bare"}">${numbered ? `<span class="ln">${n + 1}</span>` : ""}${highlight(l, lang)}</span>`).join("");
 }
 
 function diffLines(diff) {
@@ -78,6 +200,12 @@ function diffLines(diff) {
     const cls = l.startsWith("+++") || l.startsWith("---") ? "d-file" : l.startsWith("@@") ? "d-hunk" : l.startsWith("+") ? "d-add" : l.startsWith("-") ? "d-del" : "";
     return `<span class="line ${cls}"><span class="ln"></span><span class="tx">${esc(l)}</span></span>`;
   }).join("");
+}
+
+let blockId = 0;
+function cmdBlock(title, text, lang = "shell") {
+  const id = `blk-${++blockId}`;
+  return `<div class="code"><div class="code-bar"><span>${esc(title)}</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="${id}">copy</button></div><pre id="${id}"><code>${codeLines(text, lang, lang !== "shell")}</code></pre></div>`;
 }
 
 function fileBlock(title, label, body) {
@@ -106,7 +234,12 @@ function setupCopy() {
   document.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-copy-from]");
     if (!btn) return;
-    const text = document.getElementById(btn.dataset.copyFrom).innerText.trim();
+    // Copy the code only: drop line-number gutters before reading the text.
+    const copy = document.getElementById(btn.dataset.copyFrom).cloneNode(true);
+    copy.querySelectorAll(".ln").forEach((n) => n.remove());
+    // Highlighted blocks render each line as its own block <span>; join them with newlines.
+    const lines = copy.querySelectorAll(".line");
+    const text = (lines.length ? [...lines].map((l) => l.textContent).join("\n") : copy.textContent).trim();
     try { await navigator.clipboard.writeText(text); btn.textContent = "copied"; }
     catch { btn.textContent = "select + copy"; }
     setTimeout(() => { btn.textContent = "copy"; }, 1600);
@@ -224,28 +357,59 @@ function templates(data) {
 }
 
 /* ---------- Plugins ---------- */
+function pluginSheet(p) {
+  const g = PLUGIN_GUIDES[p.name] || {};
+  const env = p.env_added.map((line) => {
+    const name = line.split("=")[0];
+    return `<li><code>${esc(name)}</code>${ENV_HELP[name] ? ` · ${esc(ENV_HELP[name])}` : ""}</li>`;
+  }).join("");
+  const step = (n, title, body) => `<section class="guide-step"><h3><span class="step-n">${n}</span>${title}</h3>${body}</section>`;
+  let n = 0;
+  return `
+    <p class="guide-lede">${esc(g.tagline || p.description)}</p>
+    ${g.gets ? step(++n, "What you get", `<ul class="gets">${g.gets.map((x) => `<li>${x}</li>`).join("")}</ul>`) : ""}
+    ${step(++n, "Install it", `
+      <p>In a <b>new project</b>:</p>${cmdBlock("terminal", `novastack new my-api --plugins ${p.name}`)}
+      <p>In an <b>existing project</b> (run inside its directory):</p>${cmdBlock("terminal", `novastack add ${p.name}`)}
+      <p class="hint">Both give the same code. <code>add</code> edits ${p.patched.map((f) => `<code>${esc(f.path)}</code>`).join(", ")} and creates ${p.created.length} file${p.created.length === 1 ? "" : "s"}; review the changes and run <code>cargo check</code>.</p>`)}
+    ${g.setup ? step(++n, "Set it up", `
+      <p>${g.setup.text}</p>${cmdBlock(g.setup.cmd.includes("image:") ? "docker-compose.yml" : "terminal", g.setup.cmd, g.setup.cmd.includes("image:") ? "yaml" : "shell")}
+      ${g.setup.after ? cmdBlock("terminal", g.setup.after) : ""}
+      ${env ? `<p>Environment variables it adds to <code>.env.example</code>:</p><ul class="envs">${env}</ul>` : ""}`) : ""}
+    ${g.tryIt ? step(++n, "Try it", cmdBlock("terminal", g.tryIt)) : ""}
+    ${g.code ? step(++n, "Use it in your code", cmdBlock(g.code.title, g.code.src, g.code.lang)) : ""}
+    ${g.limits ? `<p class="note"><b>Limits.</b> ${esc(g.limits)}</p>` : ""}
+    <details class="changes">
+      <summary>What it changes in your project · ${p.created.length} new, ${p.patched.length} patched</summary>
+      <div class="changes-body">
+        <div><h3>Cargo.toml adds</h3>${fileBlock("Cargo.toml", "", codeLines(p.cargo_added.join("\n"), "toml"))}</div>
+        <div><h3>files created</h3><div class="gen-files">${p.created.map((f) => fileBlock(f.path, "new", codeLines(f.content, f.lang))).join("")}</div></div>
+        <div><h3>files patched</h3><div class="gen-files">${p.patched.map((f) => `<div class="diff">${fileBlock(f.path, "patched", diffLines(f.diff))}</div>`).join("")}</div></div>
+      </div>
+    </details>`;
+}
+
 function plugins(data) {
   const sheet = $("#sheet");
-  $("#plugin-cards").innerHTML = data.plugins.map((p, i) => `
+  $("#plugin-cards").innerHTML = data.plugins.map((p, i) => {
+    const g = PLUGIN_GUIDES[p.name] || {};
+    return `
     <button type="button" class="card" data-i="${i}" aria-haspopup="dialog">
-      <span class="card-file">plugins/${esc(p.name)}.rs</span>
+      <span class="card-file">--plugins ${esc(p.name)}</span>
       <h3>${esc(p.name)}</h3>
+      <p class="card-tag">${esc(g.tagline || "")}</p>
       <p>${esc(p.description)}</p>
-      <span class="chips">${p.dependencies.map((d) => `<span class="chip c-dep">${esc(d)}</span>`).join("")}<span class="chip">+${p.created.length} files</span><span class="chip">~${p.patched.length} patched</span></span>
-      <span class="open">open details →</span>
-    </button>`).join("");
+      <code class="card-cmd">novastack add ${esc(p.name)}</code>
+      <span class="chips">${p.dependencies.map((d) => `<span class="chip c-dep">${esc(d)}</span>`).join("")}</span>
+      <span class="open">open the guide →</span>
+    </button>`;
+  }).join("");
   $("#plugin-cards").addEventListener("click", (e) => {
     const card = e.target.closest(".card");
     if (!card) return;
     const p = data.plugins[Number(card.dataset.i)];
-    $("#sheet-title").textContent = `${p.command}`;
-    $("#sheet-body").innerHTML = `
-      <p>${esc(p.description)}</p>
-      ${PLUGIN_NOTES[p.name] ? `<p class="note">${esc(PLUGIN_NOTES[p.name])}</p>` : ""}
-      <div><h3>Cargo.toml adds</h3>${fileBlock("Cargo.toml", "", codeLines(p.cargo_added.join("\n"), "toml"))}</div>
-      ${p.env_added.length ? `<div><h3>.env.example adds</h3>${fileBlock(".env.example", "", codeLines(p.env_added.join("\n"), "env"))}</div>` : ""}
-      <div><h3>files created (${p.created.length})</h3><div class="gen-files">${p.created.map((f) => fileBlock(f.path, "new", codeLines(f.content, f.lang))).join("")}</div></div>
-      <div><h3>files patched (${p.patched.length})</h3><div class="gen-files">${p.patched.map((f) => `<div class="diff">${fileBlock(f.path, "patched", diffLines(f.diff))}</div>`).join("")}</div></div>`;
+    $("#sheet-title").textContent = `plugin · ${p.name}`;
+    $("#sheet-body").innerHTML = pluginSheet(p);
     sheet.showModal();
     $("#sheet-body").scrollTop = 0;
   });
@@ -291,6 +455,9 @@ function bind(data) {
     a.href = `${REPO}/commit/${data.built.commit}`;
     a.textContent = data.built.commit.slice(0, 7);
   }
+  const names = data.templates.map((t) => t.name);
+  const flag = $("#flag-templates");
+  if (flag) flag.innerHTML = `the template: ${names.map((n) => `<code>${esc(n)}</code>`).join(", ")}`;
   $("#built-at").textContent = data.built.at ? `on ${data.built.at}` : "";
 }
 
