@@ -1,12 +1,17 @@
 # NovaStack ⚡
 
-> **Zero-friction production-ready Rust web backend scaffolding tool.**
+[![CI](https://github.com/cybercoretech/NovaStack/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/cybercoretech/NovaStack/actions/workflows/ci.yml)
+[![Site](https://img.shields.io/badge/site-novastack--rs.pages.dev-ff9a3c)](https://novastack-rs.pages.dev)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-9b6bff)](#-license)
+![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange)
 
-NovaStack (`novastack`) eliminates days of repetitive wiring boilerplate by generating battle-tested, production-ready Rust web backends equipped with **Axum**, **SQLx**, **Tower middleware**, **structured JSON tracing**, and **Docker containerization** out of the box.
+> **Rust backends, scaffolded.** NovaStack generates Axum backends that compile on the first `cargo run`, then grows them with plugins and a component generator.
 
-## Build Templates
+Every generated project comes with typed configuration, a central error type that never leaks internals to clients, structured JSON logging, graceful shutdown, a multi-stage Dockerfile, `docker-compose.yml`, a `Justfile` and tests. You can browse the real generated files on the website: **<https://novastack-rs.pages.dev>**.
 
-Pick an archetype with `-t` / `--template` (default `rest`). Every archetype shares the same base (config, error handling, tracing, graceful shutdown, Docker), and plugins plus `novastack generate` work with all of them.
+## 🧱 Templates
+
+Pick a starting point with `-t` / `--template` (default `rest`). All templates share the same base, and every plugin works with every template.
 
 | Template | What you get |
 |----------|--------------|
@@ -16,60 +21,110 @@ Pick an archetype with `-t` / `--template` (default `rest`). Every archetype sha
 | `realtime` | WebSocket `/ws`, Server-Sent Events `/events` and `POST /publish`, fed by a broadcast hub in `AppState`, plus a demo page |
 | `minimal` | Bare Axum service with a trimmed dependency set |
 
-Each generated project includes tests for its archetype (`cargo test`).
+Databases: `--db postgres` (default), `--db sqlite` or `--db none`. Postgres and SQLite projects get a SQLx pool and embedded migrations.
+
+## 🔌 Plugins
+
+Enable plugins when you create a project (`--plugins auth,otel`) or later (`novastack add redis`). Both paths produce the same code.
+
+| Plugin | Adds |
+|--------|------|
+| `auth` | JWT issuing and verification, Argon2 password hashing, an `AuthUser` extractor that guards routes, `/auth/login` and a protected `/auth/me` |
+| `otel` | Prometheus `/metrics` with per-route request counts and latency |
+| `redis` | A `deadpool-redis` pool in `AppState` plus `get` / `set_ex` cache helpers |
+| `workers` | A background worker supervisor started at boot, and a `Task` trait for jobs |
+
+Known limits: the generated `/auth/login` is a clearly marked stub that accepts any non-empty credentials, `otel` doesn't export OpenTelemetry traces yet, and plugins guard HTTP routes only (not gRPC or WebSockets).
+
+## 🛠️ Generate components
+
+`novastack generate <kind> <name>` writes a component and registers it, so the project keeps compiling:
+
+| Kind | Creates | Registers |
+|------|---------|-----------|
+| `module` | `src/<name>/mod.rs` | `pub mod` in `lib.rs` |
+| `handler` | `src/handlers/<name>.rs` with its own router | `handlers/mod.rs`, plus `.nest("/<name>", ...)` in `router.rs` |
+| `service` | `src/services/<name>.rs` | `services/mod.rs` (created on first use) |
+| `dto` | `src/dtos/<name>.rs` | `dtos/mod.rs` (created on first use) |
+| `middleware` | `src/middleware/<name>.rs` (an Axum `from_fn` middleware) | `middleware/mod.rs` |
+
+Names are snake_cased. Rust keywords, built-in module names and existing components are rejected.
+
+## 📦 Installation
+
+Requires **Rust 1.88** or newer. NovaStack isn't on crates.io yet; install it from the repository:
 
 ```bash
-novastack new my-api                 # rest
-novastack new my-app -t htmx
-novastack new my-service -t grpc
-novastack list                       # templates, plugins and databases
+cargo install --git https://github.com/cybercoretech/NovaStack
 ```
 
-
-## Features
-
-- **🚀 Axum 0.8 Engine**: Modular routing, typed extractors, and Tower HTTP middleware (CORS, timeouts, request tracing, compression).
-- **🗄️ SQLx 0.8 Connection Pooling**: Pre-configured connection management with embedded migrations and compile-time verified queries (`SQLX_OFFLINE=true`).
-- **🛡️ Hardened Error Handling**: Centralized `AppError` implementing Axum's `IntoResponse` that guarantees zero sensitive internal leakage to HTTP clients while logging root causes.
-- **📊 Production Observability**: Structured JSON logging powered by `tracing` and `tracing-subscriber`, paired with clean OS signal traps (`SIGINT`/`SIGTERM`) for graceful server drain.
-- **🐳 Turnkey Containerization**: Multi-stage `Dockerfile` with `cargo-chef` dependency caching, `docker-compose.yml`, and GitHub Actions CI.
-- **🔌 Modular Plugins**: Opt-in features via `novastack add <plugin>`:
-  - **JWT Auth**: Session verification, password hashing, user entities.
-  - **OpenTelemetry & Prometheus**: Distributed tracing and `/metrics` scrape endpoint.
-  - **Redis Cache**: Connection pooling and caching layers with `deadpool-redis`.
-  - **Background Workers**: Task queues and background job supervisors.
-
-## Installation
+## 🚀 Quick start
 
 ```bash
-cargo install novastack
-```
+# Interactive wizard
+novastack new
 
-## Quick Start
-
-### 1. Interactive Wizard
-```bash
-novastack new my-api
-```
-
-Follow the prompts to select your database backend, plugins, and metadata.
-
-### 2. Fast CLI Flag Mode
-```bash
+# Or straight from flags
 novastack new my-api --db postgres --plugins auth,otel --no-interactive
-```
 
-### 3. Run Your New Backend
-```bash
 cd my-api
-cargo run
+cp .env.example .env
+docker compose up -d db   # local Postgres
+cargo run                 # http://localhost:8080/health
 ```
 
-### 4. Add Plugins to Existing Projects
+More commands:
+
 ```bash
-novastack add redis
+novastack add redis                 # add a plugin to an existing project
+novastack generate handler orders   # new component, routed at /orders
+novastack list                      # templates, plugins, databases (--json for scripts)
+novastack doctor                    # check your toolchain (rustc, cargo, docker, sqlx, just)
+novastack new my-api --dry-run      # show the files without writing them
 ```
 
-## License
+Generated projects declare `rust-version = "1.88"` and use Cargo's MSRV-aware resolver, so dependency resolution stays buildable on that toolchain.
 
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE).
+## ✅ What CI verifies
+
+Every push and pull request runs ([`ci.yml`](.github/workflows/ci.yml)):
+
+- **NovaStack itself:** `rustfmt`, `clippy -D warnings`, tests on stable and on Rust 1.88, and `cargo-deny` (advisories, licenses, sources).
+- **Generated projects:** a compile matrix ([`tests/generated_compile.rs`](tests/generated_compile.rs)) that scaffolds every template, database and plugin combination, plus projects grown with `add` and `generate`, then runs `cargo clippy --all-targets -D warnings` and `cargo test` on each one. It runs on stable and on 1.88.
+- **Docker** (on `main`, weekly and on demand): [`scripts/docker-smoke.sh`](scripts/docker-smoke.sh) runs a Postgres + Redis + all-plugins project under `docker compose` and checks the CRUD API, Swagger UI, JWT login, metrics and the container healthcheck. It also builds and calls a gRPC image.
+
+A weekly run catches new crate releases that would break generated projects, which have no lockfile.
+
+Run the matrix locally (needs network, a few minutes):
+
+```bash
+cargo test --test generated_compile -- --ignored
+```
+
+## 🗂️ How it works
+
+- `templates_shared/`: the base project, rendered with [minijinja](https://docs.rs/minijinja) for every `new`.
+- `templates/<template>/`: the files a template adds. Files ending in `.jinja` are rendered; everything else (Askama HTML, `.proto`, `build.rs`) is copied as is.
+- `templates/plugins/`, `templates/generate/`: plugin files and component templates.
+- Templates, plugins and generators edit existing files only at **anchor comments** such as `// NOVASTACK:ROUTES` or `# NOVASTACK:DEPENDENCIES`. A missing anchor is reported as an error rather than skipped. Keep the anchors in generated projects if you want to use `add` and `generate` later.
+- `novastack.toml` in each generated project records its template, database and plugins.
+
+## 🌐 Website
+
+<https://novastack-rs.pages.dev>, hosted on Cloudflare Pages. It's built from the real binary at deploy time ([`site/tools/build-data.py`](site/tools/build-data.py)), so every file, diff and count on it matches the code. Preview it locally:
+
+```bash
+site/tools/build.sh /tmp/novastack-site && python3 -m http.server -d /tmp/novastack-site 8000
+```
+
+## 🗺️ Status
+
+NovaStack is early (v0.1.0). Not there yet: crates.io releases, OpenTelemetry trace export, gRPC and WebSocket authentication, and database-backed versions of the example resources.
+
+## 📜 License
+
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+
+---
+
+👻 Code & Design by Darkstardevx 🤖 Generated with [Claude Code](https://claude.com/claude-code)

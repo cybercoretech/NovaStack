@@ -64,7 +64,11 @@ pub enum Commands {
     },
 
     /// List all available templates, plugins, and stack components
-    List,
+    List {
+        /// Print the catalogue as JSON (templates, plugins, databases, generators)
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Check system dependencies (rustc, cargo, docker, sqlx, just)
     Doctor,

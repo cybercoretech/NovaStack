@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NovaStack — Rust backends, scaffolded</title>
+  <meta name="description" content="NovaStack scaffolds Rust web backends that compile: Axum, optional SQLx, five templates (REST, HTMX, gRPC, realtime, minimal), plugins for auth, metrics, Redis and workers, and a generator for new components. Every combination is built and tested in CI.">
+  <meta name="theme-color" content="#07060c">
+  <meta name="color-scheme" content="dark">
+  <link rel="canonical" href="https://novastack-rs.pages.dev/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="NovaStack — Rust backends, scaffolded">
+  <meta property="og:description" content="Axum backends that compile, with five templates, plugins and a component generator. Every combination is tested in CI.">
+  <meta property="og:url" content="https://novastack-rs.pages.dev/">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+  <link rel="stylesheet" href="https://cybercoretech.github.io/kit/chooser.css">
+  <link rel="stylesheet" href="styles.css">
+  <script src="site-config.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="bar">
+    <a class="wordmark" href="#top" aria-label="NovaStack home">
+      <img src="assets/favicon.svg" alt="" width="22" height="22">
+      <span>NOVA<b>STACK</b></span>
+    </a>
+    <span class="bar-path" aria-hidden="true">~/cybercore/novastack <b>main</b></span>
+    <a class="bar-gh" href="https://github.com/cybercoretech/NovaStack" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span><span class="sr"> (opens in a new tab)</span></a>
+    <cybercore-theme-chooser shuffle compact match=".bar-gh"></cybercore-theme-chooser>
+    <button class="burger" type="button" aria-expanded="false" aria-controls="drawer" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+  </header>
+
+  <nav class="drawer" id="drawer" aria-label="Site" hidden>
+    <div class="drawer-head"><span class="comment">// navigate</span><button class="drawer-close" type="button" aria-label="Close menu">✕</button></div>
+    <ul class="drawer-body" id="drawer-body"></ul>
+    <p class="drawer-foot"><kbd>Esc</kbd> to close</p>
+  </nav>
+  <div class="scrim" hidden></div>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="dot"></span>cybercore / novastack · <span data-bind="version">—</span></p>
+        <h1>Rust backends,<br><em>scaffolded.</em></h1>
+        <p class="lede">NovaStack generates Axum backends that compile on the first <code>cargo run</code>: typed config, error handling, structured logs, graceful shutdown, Docker and tests. Pick a template, add plugins, and generate new components as the project grows.</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="#install">$ install</a>
+          <a class="btn btn-ghost" href="#templates">browse the templates</a>
+        </div>
+        <ul class="facts" aria-label="At a glance">
+          <li><b data-bind="template-count">—</b> templates</li>
+          <li><b data-bind="plugin-count">—</b> plugins</li>
+          <li><b data-bind="matrix-count">—</b> compile-matrix tests in CI</li>
+          <li>Rust <b data-bind="rust">—</b>+</li>
+        </ul>
+      </div>
+      <div class="term-wrap">
+        <div class="term-bar"><i></i><i></i><i></i><span>zsh — novastack</span></div>
+        <pre class="term" id="term" aria-label="Example session"><span class="tl"><b class="p">❯</b> novastack new my-api -t rest --db postgres --plugins auth,otel</span></pre>
+      </div>
+    </section>
+
+    <section class="section" id="templates" aria-labelledby="templates-h">
+      <header class="section-head">
+        <p class="kicker">// 01 · templates</p>
+        <h2 id="templates-h">Five starting points, one base.</h2>
+        <p>Every template shares the same base and works with every plugin. The explorer shows the real files <code>novastack new</code> writes (no database, no plugins). Open any file.</p>
+      </header>
+      <div class="tabs" role="tablist" aria-label="Templates" id="template-tabs"></div>
+      <div class="explorer" id="template-panel" role="tabpanel">
+        <div class="explorer-head">
+          <p class="explorer-summary" id="template-summary"></p>
+          <div class="cmd"><code id="template-cmd"></code><button class="btn btn-ghost btn-sm copy" type="button" data-copy-from="template-cmd">copy</button></div>
+        </div>
+        <div class="explorer-body">
+          <div class="tree" id="template-tree" role="tree" aria-label="Generated files"></div>
+          <div class="code-view" id="template-code" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="plugins" aria-labelledby="plugins-h">
+      <header class="section-head">
+        <p class="kicker">// 02 · plugins</p>
+        <h2 id="plugins-h">Add features without rewiring.</h2>
+        <p>Plugins work at creation (<code>--plugins auth,otel</code>) or later (<code>novastack add redis</code>), and both paths produce the same code. Open a card to see exactly what a plugin changes.</p>
+      </header>
+      <div class="cards" id="plugin-cards"></div>
+    </section>
+
+    <section class="section" id="generate" aria-labelledby="generate-h">
+      <header class="section-head">
+        <p class="kicker">// 03 · generate</p>
+        <h2 id="generate-h">Grow the project, keep it compiling.</h2>
+        <p><code>novastack generate</code> writes a component and registers it: module declarations, and routes for handlers. Below is the real output for a component called <code>orders</code>.</p>
+      </header>
+      <div class="tabs" role="tablist" aria-label="Component kinds" id="generate-tabs"></div>
+      <div class="gen-panel" id="generate-panel" role="tabpanel"></div>
+    </section>
+
+    <section class="section" id="verified" aria-labelledby="verified-h">
+      <header class="section-head">
+        <p class="kicker">// 04 · verified</p>
+        <h2 id="verified-h">Every combination is built in CI.</h2>
+        <p>Generated projects are checked the way you'd use them: <code>cargo clippy -D warnings</code> and <code>cargo test</code> on each one, on stable and on Rust <span data-bind="rust">—</span>. Weekly runs catch new crate releases that would break them.</p>
+      </header>
+      <p class="badge-row"><a href="https://github.com/cybercoretech/NovaStack/actions/workflows/ci.yml" target="_blank" rel="noopener"><img src="https://github.com/cybercoretech/NovaStack/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status for the main branch" width="104" height="20"></a></p>
+      <div class="verify">
+        <div class="panel">
+          <h3><span class="comment">// </span>compile matrix</h3>
+          <ul class="checks" id="matrix-list"></ul>
+        </div>
+        <div class="panel">
+          <h3><span class="comment">// </span>docker smoke</h3>
+          <div id="smoke-list"></div>
+        </div>
+        <div class="panel">
+          <h3><span class="comment">// </span>ci jobs</h3>
+          <ul class="checks" id="job-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="install" aria-labelledby="install-h">
+      <header class="section-head">
+        <p class="kicker">// 05 · install</p>
+        <h2 id="install-h">Up and running.</h2>
+        <p>Needs Rust <span data-bind="rust">—</span> or newer. NovaStack isn't on crates.io yet, so install it from the repository.</p>
+      </header>
+      <div class="code">
+        <div class="code-bar"><span>quickstart.sh</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="install-cmd">copy</button></div>
+<pre id="install-cmd"><code>cargo install --git https://github.com/cybercoretech/NovaStack
+novastack new my-api --db postgres --plugins auth
+cd my-api &amp;&amp; cp .env.example .env
+docker compose up -d db
+cargo run</code></pre>
+      </div>
+      <p class="honest"><b>// also</b> <code>novastack new</code> with no arguments starts an interactive wizard, <code>novastack list</code> shows everything available, and <code>novastack doctor</code> checks your toolchain.</p>
+    </section>
+
+    <section class="section" id="roadmap" aria-labelledby="roadmap-h">
+      <header class="section-head">
+        <p class="kicker">// 06 · status</p>
+        <h2 id="roadmap-h">What's not there yet.</h2>
+        <p>NovaStack is early (<span data-bind="version">—</span>). These gaps are known and tracked:</p>
+      </header>
+      <ul class="gaps">
+        <li><b>Plugins guard HTTP only.</b> The auth plugin protects HTTP routes; there's no gRPC interceptor or WebSocket authentication yet.</li>
+        <li><b>The login handler is a stub.</b> Generated <code>/auth/login</code> issues a token for any non-empty credentials and is clearly marked; wire it to your user store.</li>
+        <li><b>Metrics, not tracing export.</b> The <code>otel</code> plugin serves Prometheus metrics; OpenTelemetry trace export is planned.</li>
+        <li><b>In-memory examples.</b> The example resources in the REST and HTMX templates keep data in memory, so they work with any database choice.</li>
+        <li><b>Not on crates.io yet.</b> Install from the repository for now.</li>
+      </ul>
+    </section>
+  </main>
+
+  <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+    <div class="sheet-bar"><span id="sheet-title"></span><button class="sheet-close" type="button" aria-label="Close">✕</button></div>
+    <div class="sheet-body" id="sheet-body"></div>
+  </dialog>
+
+  <footer class="footer">
+    <cybercore-contact repo="NovaStack">
+      <p><a href="mailto:dev@cybercoretech.net">dev@cybercoretech.net</a> · security reports: <a href="mailto:security@cybercoretech.net">security@cybercoretech.net</a> · <a href="https://github.com/cybercoretech" target="_blank" rel="noopener">GitHub</a> · <a href="https://discord.gg/vBMcK5wAx" target="_blank" rel="noopener">Discord</a></p>
+    </cybercore-contact>
+    <p class="legal">NovaStack is dual-licensed under MIT or Apache-2.0 · built from <a id="built-commit" href="https://github.com/cybercoretech/NovaStack" target="_blank" rel="noopener">main</a> <span id="built-at"></span></p>
+  </footer>
+
+  <script type="module" src="https://cybercoretech.github.io/kit/chooser.js"></script>
+  <script type="module" src="https://cybercoretech.github.io/kit/contact.js"></script>
+  <script type="module" src="site.js"></script>
+</body>
+</html>
