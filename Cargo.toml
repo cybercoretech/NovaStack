@@ -3,12 +3,25 @@ name = "novastack"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.88"
-description = "Modular, opinionated CLI scaffolding tool for production-ready Rust web backends"
+description = "Scaffold Axum backends that compile: REST, HTMX, gRPC, realtime and minimal templates, plugins (auth, metrics, Redis, workers) and a component generator"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cybercoretech/NovaStack"
+homepage = "https://novastack-rs.pages.dev"
+documentation = "https://docs.rs/novastack"
 readme = "README.md"
 keywords = ["scaffold", "axum", "backend", "sqlx", "cli"]
-categories = ["command-line-utilities", "development-tools"]
+categories = ["command-line-utilities", "development-tools", "web-programming"]
+# Ship the CLI, its embedded templates, tests and docs; not the website or CI config.
+include = [
+    "/src/**",
+    "/templates/**",
+    "/templates_shared/**",
+    "/tests/**",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
+]
 
 [[bin]]
 name = "novastack"

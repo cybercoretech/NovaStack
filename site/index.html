@@ -144,9 +144,9 @@ rustc --version</code></pre></div>
         </li>
         <li class="step">
           <h3><span class="step-n">2</span>Install NovaStack</h3>
-          <p>NovaStack isn't on crates.io yet, so install it from the repository. Then let <code>novastack doctor</code> check your toolchain (rustc, cargo, git, docker, sqlx, just).</p>
+          <p>Install it from <a href="https://crates.io/crates/novastack" target="_blank" rel="noopener">crates.io</a>, then let <code>novastack doctor</code> check your toolchain (rustc, cargo, git, docker, sqlx, just).</p>
           <div class="code"><div class="code-bar"><span>terminal</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="step-install">copy</button></div>
-<pre id="step-install"><code>cargo install --git https://github.com/cybercoretech/NovaStack
+<pre id="step-install"><code>cargo install novastack
 novastack --version
 novastack doctor</code></pre></div>
         </li>
@@ -202,7 +202,6 @@ novastack list                      # templates, plugins and databases</code></p
         <li><b>The login handler is a stub.</b> Generated <code>/auth/login</code> issues a token for any non-empty credentials and is clearly marked; wire it to your user store.</li>
         <li><b>Metrics, not tracing export.</b> The <code>otel</code> plugin serves Prometheus metrics; OpenTelemetry trace export is planned.</li>
         <li><b>In-memory examples.</b> The example resources in the REST and HTMX templates keep data in memory, so they work with any database choice.</li>
-        <li><b>Not on crates.io yet.</b> Install from the repository for now.</li>
       </ul>
     </section>
   </main>
