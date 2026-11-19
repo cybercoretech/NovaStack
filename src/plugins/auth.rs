@@ -16,7 +16,7 @@ impl Plugin for AuthPlugin {
     }
 
     fn description(&self) -> &'static str {
-        "JWT authentication, Argon2 password hashing, and an AuthUser extractor that guards routes"
+        "User accounts with register/login, JWT tokens, Argon2 password hashing, and an AuthUser extractor that guards routes"
     }
 
     fn dependencies(&self) -> &'static str {
@@ -38,9 +38,15 @@ password-hash = { version = "0.5", features = ["getrandom"] }
                 "plugins/auth/src/auth/extractor.rs.jinja",
                 "src/auth/extractor.rs",
             ),
+            ("plugins/auth/src/auth/store.rs.jinja", "src/auth/store.rs"),
             (
                 "plugins/auth/src/handlers/auth.rs.jinja",
                 "src/handlers/auth.rs",
+            ),
+            // Skipped for projects without a database (accounts then live in memory)
+            (
+                "plugins/auth/src/db/migrations/20240101000002_users.sql.jinja",
+                "src/db/migrations/20240101000002_users.sql",
             ),
         ]
     }
@@ -91,6 +97,29 @@ let jwt_expiration_hours = std::env::var("JWT_EXPIRATION_HOURS")
             P::ENV_ANCHOR,
             "# JWT Authentication (generate a secret with: openssl rand -hex 32)\nJWT_SECRET=change-me-to-a-long-random-secret\nJWT_EXPIRATION_HOURS=24\n\n",
         );
+
+        // Account storage in AppState: the SQLx pool when the project has a database,
+        // otherwise an in-memory store
+        let has_db = files
+            .get("src/state.rs")
+            .is_some_and(|state| state.contains("pub db: sqlx::"));
+        P::patch(
+            files,
+            "src/state.rs",
+            P::STATE_ANCHOR,
+            "pub users: crate::auth::UserStore,",
+        )?;
+        P::patch(
+            files,
+            "src/state.rs",
+            P::STATE_SETUP_ANCHOR,
+            if has_db {
+                "let users = crate::auth::UserStore::new(db.clone());"
+            } else {
+                "let users = crate::auth::UserStore::default();"
+            },
+        )?;
+        P::patch(files, "src/state.rs", P::STATE_INIT_ANCHOR, "users,")?;
 
         P::patch(files, "Cargo.toml", P::DEPS_ANCHOR, self.dependencies())?;
         Ok(())

@@ -16,7 +16,7 @@ Pick a starting point with `-t` / `--template` (default `rest`). All templates s
 
 | Template | What you get |
 |----------|--------------|
-| `rest` | JSON API with an OpenAPI spec ([utoipa](https://docs.rs/utoipa)), Swagger UI at `/docs`, and an example `/api/items` CRUD resource |
+| `rest` | JSON API with an OpenAPI spec ([utoipa](https://docs.rs/utoipa)), Swagger UI at `/docs`, and an example `/api/items` CRUD resource stored in the database |
 | `htmx` | Server-rendered UI: [Askama](https://docs.rs/askama) templates, HTMX fragment swaps, Tailwind (browser CDN build, for development) |
 | `grpc` | [Tonic](https://docs.rs/tonic) gRPC service from a `.proto` file (bundled `protoc`), gRPC health and reflection, on the same port as HTTP |
 | `realtime` | WebSocket `/ws`, Server-Sent Events `/events` and `POST /publish`, fed by a broadcast hub in `AppState`, plus a demo page |
@@ -30,12 +30,12 @@ Enable plugins when you create a project (`--plugins auth,otel`) or later (`nova
 
 | Plugin | Adds |
 |--------|------|
-| `auth` | JWT issuing and verification, Argon2 password hashing, an `AuthUser` extractor that guards routes, `/auth/login` and a protected `/auth/me` |
+| `auth` | User accounts: `/auth/register`, `/auth/login` (JWT) and a protected `/auth/me`, Argon2id password hashes in a `users` table, and an `AuthUser` extractor that guards routes |
 | `otel` | Prometheus `/metrics` with per-route request counts and latency |
 | `redis` | A `deadpool-redis` pool in `AppState` plus `get` / `set_ex` cache helpers |
 | `workers` | A background worker supervisor started at boot, and a `Task` trait for jobs |
 
-Known limits: the generated `/auth/login` is a clearly marked stub that accepts any non-empty credentials, `otel` doesn't export OpenTelemetry traces yet, and plugins guard HTTP routes only (not gRPC or WebSockets).
+Known limits: auth has no rate limiting, email verification or password reset yet, `otel` doesn't export OpenTelemetry traces yet, and plugins guard HTTP routes only (not gRPC or WebSockets). With `--db none`, the example data and accounts live in memory.
 
 ## 🛠️ Generate components
 
@@ -100,9 +100,9 @@ Every push and pull request runs ([`ci.yml`](.github/workflows/ci.yml)):
 - **Generated projects:** a compile matrix ([`tests/generated_compile.rs`](tests/generated_compile.rs)) that scaffolds every template, database and plugin combination, plus projects grown with `add` and `generate`, then runs `cargo clippy --all-targets -D warnings` and `cargo test` on each one. It runs on stable and on 1.88.
 - **macOS and Windows:** NovaStack's tests, plus generated projects (SQLite with every plugin, gRPC with its bundled `protoc`, HTMX) built and tested on both.
 - **Docker** (on `main`, weekly and on demand): [`scripts/docker-smoke.sh`](scripts/docker-smoke.sh) builds and runs one project per template and checks it over HTTP:
-  - `rest`: Postgres + Redis + all plugins under `docker compose`; CRUD API, Swagger UI, JWT login and protected route, metrics
+  - `rest`: Postgres + Redis + all plugins under `docker compose`; CRUD API, Swagger UI, register/login (including 401/409/422 cases) and protected route, metrics, data surviving an app restart
   - `grpc`: a gRPC call over HTTP/2 and HTTP health on the same port, with an SQLite data volume
-  - `htmx`: SQLite + auth under Compose; page, add/delete fragments, HTML escaping
+  - `htmx`: SQLite + auth under Compose; page, add/delete fragments, HTML escaping, todos surviving an app restart
   - `realtime`: Redis + workers under Compose; a message published over HTTP arrives on the SSE stream, WebSocket upgrade
   - `minimal`: health and 404 handling
 
@@ -134,7 +134,7 @@ site/tools/build.sh /tmp/novastack-site && python3 -m http.server -d /tmp/novast
 
 ## 🗺️ Status
 
-NovaStack is early (v0.1.0; see the [changelog](CHANGELOG.md)). Not there yet: OpenTelemetry trace export, gRPC and WebSocket authentication, and database-backed versions of the example resources.
+NovaStack is early (v0.2.0; see the [changelog](CHANGELOG.md)). Not there yet: OpenTelemetry trace export, gRPC and WebSocket authentication, and a `novastack upgrade` path for existing projects.
 
 ## 📜 License
 

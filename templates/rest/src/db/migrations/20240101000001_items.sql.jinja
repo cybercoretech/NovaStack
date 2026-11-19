@@ -1,0 +1,16 @@
+-- Example resource behind /api/items (src/api/items.rs).
+{% if db == "postgres" %}
+CREATE TABLE IF NOT EXISTS items (
+    id          BIGSERIAL PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+{% else %}
+CREATE TABLE IF NOT EXISTS items (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    description TEXT,
+    created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+{% endif %}

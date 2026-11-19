@@ -19,23 +19,30 @@ const ENV_HELP = {
 };
 const PLUGIN_GUIDES = {
   auth: {
-    tagline: "Log users in with JWTs and protect routes.",
+    tagline: "User accounts: register, log in with JWTs, protect routes.",
     gets: [
-      "<code>POST /auth/login</code> returns a signed JWT.",
+      "<code>POST /auth/register</code> creates an account (password stored as an Argon2id hash).",
+      "<code>POST /auth/login</code> checks the password and returns a signed JWT.",
       "<code>GET /auth/me</code>, an example route that requires a valid token.",
       "An <code>AuthUser</code> extractor: add it to any handler's arguments to require login.",
-      "Argon2 helpers: <code>hash_password</code> and <code>verify_password</code>.",
+      "A <code>users</code> table and migration with <code>--db postgres</code> or <code>sqlite</code>; with <code>--db none</code>, accounts live in memory.",
     ],
     setup: { text: "Set a real signing secret in <code>.env</code>, then start the app:", cmd: `cp .env.example .env    # if you haven't yet
 sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env
 cargo run` },
-    tryIt: `# log in (any non-empty username/password works until you wire up a user store)
+    tryIt: `# create an account (username 3-64 chars, password 8+ chars)
+curl -s -X POST localhost:8080/auth/register \\
+  -H 'content-type: application/json' \\
+  -d '{"username":"ada","password":"correct horse"}'
+# {"id":1,"username":"ada"}
+
+# log in and keep the token
 TOKEN=$(curl -s -X POST localhost:8080/auth/login \\
   -H 'content-type: application/json' \\
-  -d '{"username":"ada","password":"secret"}' | sed -E 's/.*"token":"([^"]+)".*/\\1/')
+  -d '{"username":"ada","password":"correct horse"}' | sed -E 's/.*"token":"([^"]+)".*/\\1/')
 
 curl localhost:8080/auth/me -H "Authorization: Bearer $TOKEN"
-# {"user_id":"ada"}
+# {"id":1,"username":"ada"}
 
 curl localhost:8080/auth/me
 # {"error":{"code":401,"message":"Missing bearer token"}}`,
@@ -44,16 +51,13 @@ use axum::Json;
 use serde_json::{json, Value};
 
 /// Only reachable with a valid \`Authorization: Bearer <token>\` header.
+/// \`user.user_id\` is the account id from the users table.
 pub async fn my_orders(user: AuthUser) -> Json<Value> {
     Json(json!({ "orders_for": user.user_id }))
 }
 
-// in router.rs: .route("/my-orders", get(my_orders))
-
-// hashing a password before storing it:
-let hash = crate::auth::password::hash_password("hunter2")?;
-let ok = crate::auth::password::verify_password("hunter2", &hash)?;` },
-    limits: "The generated /auth/login is a stub: it issues a token for any non-empty credentials. Before shipping, look the user up and check the password with verify_password. Auth guards HTTP routes only (not gRPC or WebSockets).",
+// in router.rs: .route("/my-orders", get(my_orders))` },
+    limits: "Wrong passwords and unknown usernames get the same 401, with the same Argon2 cost. There is no rate limiting, email verification or password reset yet; add them before going public. Auth guards HTTP routes only (not gRPC or WebSockets).",
   },
   otel: {
     tagline: "Prometheus metrics for every route.",

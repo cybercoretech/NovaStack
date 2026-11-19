@@ -149,6 +149,20 @@ fn gen_htmx_archetype() {
     check_archetype(TemplateChoice::Htmx);
 }
 
+/// The HTMX todo store has its own Postgres queries.
+#[test]
+#[ignore = "needs network; slow"]
+fn gen_htmx_postgres() {
+    let tmp = TempDir::new().unwrap();
+    assert_builds_clean(&scaffold_template(
+        &tmp,
+        "gen-htmx-pg",
+        TemplateChoice::Htmx,
+        DbChoice::Postgres,
+        &[PluginChoice::Auth],
+    ));
+}
+
 #[test]
 #[ignore = "needs network; slow"]
 fn gen_grpc_archetype() {

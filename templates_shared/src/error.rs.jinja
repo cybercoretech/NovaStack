@@ -17,6 +17,9 @@ pub enum AppError {
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     {% if db != "none" %}
     #[error("Database error")]
     Database(#[from] sqlx::Error),
@@ -32,6 +35,7 @@ impl IntoResponse for AppError {
             AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found"),
             AppError::Validation(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.as_str()),
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.as_str()),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str()),
             {% if db != "none" %}
             AppError::Database(err) => {
                 tracing::error!(error = %err, "Database query failure");

@@ -1,0 +1,14 @@
+-- Example todo list behind the HTMX page (src/web/mod.rs).
+{% if db == "postgres" %}
+CREATE TABLE IF NOT EXISTS todos (
+    id         BIGSERIAL PRIMARY KEY,
+    title      TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+{% else %}
+CREATE TABLE IF NOT EXISTS todos (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    title      TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+{% endif %}

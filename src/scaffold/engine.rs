@@ -91,7 +91,7 @@ impl ScaffoldEngine {
             let target_path = path_str.strip_suffix(".jinja").unwrap_or(path_str);
 
             // Projects without a database get no db module or migrations
-            if config.db == DbChoice::None && target_path.starts_with("src/db/") {
+            if skips_db_file(config.db, target_path) {
                 continue;
             }
 
@@ -117,6 +117,9 @@ impl ScaffoldEngine {
             if path_str.starts_with(template_dir) {
                 let relative = path_str.strip_prefix(template_dir).unwrap_or(path_str);
                 let target_path = relative.strip_suffix(".jinja").unwrap_or(relative);
+                if skips_db_file(config.db, target_path) {
+                    continue;
+                }
 
                 let raw = Templates::get(path_str).ok_or_else(|| {
                     NovaError::Other(format!("Embedded template not found: {}", path_str))
@@ -131,6 +134,9 @@ impl ScaffoldEngine {
         for choice in &config.plugins {
             let plugin = get_plugin(*choice);
             for (template_rel, target_rel) in plugin.template_files() {
+                if skips_db_file(config.db, target_rel) {
+                    continue;
+                }
                 if let Some(raw) = Templates::get(template_rel) {
                     let template_text = std::str::from_utf8(raw.data.as_ref()).map_err(|e| {
                         NovaError::Other(format!(
@@ -283,6 +289,9 @@ impl ScaffoldEngine {
 
         // Refuse to clobber files the user may already have
         for (_, target_rel) in plugin.template_files() {
+            if skips_db_file(cfg.db, target_rel) {
+                continue;
+            }
             if project_dir.join(target_rel).exists() {
                 return Err(NovaError::Other(format!(
                     "'{}' already exists; refusing to overwrite it while installing '{}'",
@@ -314,6 +323,9 @@ impl ScaffoldEngine {
 
         // Write new plugin template files
         for (tmpl_path, target_rel) in plugin.template_files() {
+            if skips_db_file(cfg.db, target_rel) {
+                continue;
+            }
             if let Some(raw) = Templates::get(tmpl_path) {
                 let tmpl_str = std::str::from_utf8(raw.data.as_ref()).map_err(|e| {
                     NovaError::Other(format!("Invalid UTF-8 in template '{}': {}", tmpl_path, e))
@@ -384,6 +396,12 @@ const PATCHABLE_FILES: &[&str] = &[
     "src/router.rs",
     "src/handlers/mod.rs",
 ];
+
+/// Projects without a database get no `src/db/` files (db module, migrations), whether they
+/// come from the shared templates, an archetype or a plugin.
+fn skips_db_file(db: DbChoice, target_path: &str) -> bool {
+    db == DbChoice::None && target_path.starts_with("src/db/")
+}
 
 /// Renders `.jinja` templates; copies every other embedded file verbatim (e.g. Askama HTML
 /// templates, whose `{{ }}` syntax must reach the generated project untouched).

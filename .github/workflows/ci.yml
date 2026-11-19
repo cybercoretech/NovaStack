@@ -101,7 +101,7 @@ jobs:
               gen_add_plugins_and_generate_components
           - shard: htmx + realtime
             toolchain: stable
-            tests: gen_htmx_archetype gen_realtime_archetype
+            tests: gen_htmx_archetype gen_htmx_postgres gen_realtime_archetype
           - shard: grpc
             toolchain: stable
             tests: gen_grpc_archetype

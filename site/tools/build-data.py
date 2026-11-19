@@ -119,9 +119,13 @@ def smoke_checks():
     """Docker smoke scenarios (from the script's header) and the checks each one runs."""
     text = (ROOT / "scripts/docker-smoke.sh").read_text()
     titles = dict(re.findall(r"^#   (\w+)\s{2,}(.+)$", text, re.M))
+    after_restart = dict(re.findall(r"^after_restart_(\w+)\(\) \{\n(.*?)^\}", text, re.M | re.S))
     sections = []
     for name, fn in re.findall(r"^checks_(\w+)\(\) \{\n(.*?)^\}", text, re.M | re.S):
-        checks = re.findall(r'expect "([^"]+)"', fn) + ["container healthcheck"]
+        checks = re.findall(r'expect "([^"]+)"', fn)
+        # Checks run after `docker compose restart app` (data must persist)
+        checks += re.findall(r'expect "([^"]+)"', after_restart.get(name, ""))
+        checks += ["container healthcheck"]
         sections.append({"title": titles.get(name, name), "checks": checks})
     return sections
 

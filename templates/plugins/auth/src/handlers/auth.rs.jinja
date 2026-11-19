@@ -3,14 +3,14 @@ use crate::error::AppError;
 use crate::state::AppState;
 use axum::{
     extract::State,
+    http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 
 #[derive(Deserialize)]
-pub struct LoginRequest {
+pub struct Credentials {
     pub username: String,
     pub password: String,
 }
@@ -20,28 +20,51 @@ pub struct LoginResponse {
     pub token: String,
 }
 
+#[derive(Serialize)]
+pub struct UserResponse {
+    pub id: i64,
+    pub username: String,
+}
+
 pub fn auth_router() -> Router<AppState> {
     Router::new()
+        .route("/register", post(register_handler))
         .route("/login", post(login_handler))
         .route("/me", get(me_handler))
 }
 
-/// Issues a JWT for the given credentials.
-///
-/// SCAFFOLD STUB: this accepts any non-empty username/password. Before shipping, look the
-/// user up and check the stored hash with `crate::auth::password::verify_password`.
+/// `POST /auth/register`: creates an account. 201 on success, 422 for a username shorter
+/// than 3 characters or a password shorter than 8, 409 when the username is taken.
+pub async fn register_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<Credentials>,
+) -> Result<(StatusCode, Json<UserResponse>), AppError> {
+    let user = state
+        .users
+        .register(&payload.username, &payload.password)
+        .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(UserResponse {
+            id: user.id,
+            username: user.username,
+        }),
+    ))
+}
+
+/// `POST /auth/login`: checks the credentials and issues a JWT whose subject is the user id.
+/// Wrong passwords and unknown usernames both get the same 401.
 pub async fn login_handler(
     State(state): State<AppState>,
-    Json(payload): Json<LoginRequest>,
+    Json(payload): Json<Credentials>,
 ) -> Result<Json<LoginResponse>, AppError> {
-    if payload.username.is_empty() || payload.password.is_empty() {
-        return Err(AppError::Validation(
-            "Username and password are required".into(),
-        ));
-    }
+    let user = state
+        .users
+        .authenticate(&payload.username, &payload.password)
+        .await?;
 
     let token = generate_token(
-        &payload.username,
+        &user.id.to_string(),
         &state.config.jwt_secret,
         state.config.jwt_expiration_hours,
     )?;
@@ -49,7 +72,17 @@ pub async fn login_handler(
     Ok(Json(LoginResponse { token }))
 }
 
-/// Example protected route: returns the caller identified by their bearer token.
-pub async fn me_handler(user: AuthUser) -> Json<Value> {
-    Json(json!({ "user_id": user.user_id }))
+/// `GET /auth/me`: example protected route returning the caller identified by their bearer
+/// token. A valid token for an account that no longer exists gets 401.
+pub async fn me_handler(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<Json<UserResponse>, AppError> {
+    let invalid = || AppError::Unauthorized("account no longer exists".into());
+    let id = user.user_id.parse::<i64>().map_err(|_| invalid())?;
+    let account = state.users.find_by_id(id).await?.ok_or_else(invalid)?;
+    Ok(Json(UserResponse {
+        id: account.id,
+        username: account.username,
+    }))
 }

@@ -4,6 +4,45 @@ All notable changes to NovaStack are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-11-19
+
+Generated example code now stores data and checks passwords for real.
+
+### Added
+
+- `auth` plugin: user accounts. `POST /auth/register` creates a user (username 3–64
+  characters without spaces, password 8–128 characters; 422 otherwise, 409 when the
+  username is taken) and stores an Argon2id hash. `POST /auth/login` checks the password
+  and issues a JWT whose subject is the user id. `GET /auth/me` returns the account's id
+  and username. A `UserStore` in `AppState` is backed by a new `users` table and migration
+  (Postgres or SQLite), or by memory with `--db none`.
+- `AppError::Conflict` (409) in generated projects.
+- Generated tests run against an in-memory SQLite database for SQLite projects and against
+  `DATABASE_URL` for Postgres projects (skipped when it isn't set). The auth plugin ships
+  tests for registration, login, wrong passwords, unknown users and duplicates.
+
+### Changed
+
+- The `rest` example resource (`/api/items`) and the `htmx` todo list are stored in
+  database tables (`items`, `todos`) with SQLx when the project has a database. Projects
+  with `--db none` keep the in-memory stores. Item and todo ids are now `i64`.
+- `api::routes()` and `web::routes()` take their store (`ItemStore` / `TodoStore`), built
+  from `AppState` in `router.rs`.
+- Login checks are uniform: unknown usernames and wrong passwords both return the same
+  401 and both run one Argon2 verification. Hashing runs on the blocking thread pool.
+- Archetype and plugin files under `src/db/` are skipped for projects without a database,
+  like the shared ones.
+
+### Removed
+
+- The `/auth/login` stub that issued a token for any non-empty credentials.
+
+### Verified
+
+- CI also builds and tests an `htmx` project on Postgres. The Docker smoke tests register
+  and log in (including 401, 409 and 422 cases) and restart the app to check that items,
+  accounts and todos persist.
+
 ## [0.1.0] - 2026-11-19
 
 First release on crates.io.
@@ -51,4 +90,5 @@ First release on crates.io.
 - Plugins guard HTTP routes only (no gRPC interceptor or WebSocket authentication).
 - The REST and HTMX example resources keep data in memory.
 
+[0.2.0]: https://github.com/cybercoretech/NovaStack/releases/tag/v0.2.0
 [0.1.0]: https://github.com/cybercoretech/NovaStack/releases/tag/v0.1.0
