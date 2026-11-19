@@ -16,7 +16,7 @@ impl Plugin for AuthPlugin {
     }
 
     fn description(&self) -> &'static str {
-        "JWT authentication, password hashing with Argon2, and route guard middleware"
+        "JWT authentication, Argon2 password hashing, and an AuthUser extractor that guards routes"
     }
 
     fn dependencies(&self) -> &'static str {

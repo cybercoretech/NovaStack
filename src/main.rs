@@ -4,7 +4,7 @@ use novastack_core::archetypes::{self, get_archetype};
 use novastack_core::cli::{Cli, Commands, PluginChoice};
 use novastack_core::cli_generate::run_generate;
 use novastack_core::doctor::run_doctor;
-use novastack_core::error::Result;
+use novastack_core::error::{NovaError, Result};
 use novastack_core::scaffold::{ScaffoldConfig, ScaffoldEngine};
 use novastack_core::wizard::run_wizard;
 use std::process;
@@ -67,8 +67,15 @@ fn run(cli: Cli) -> Result<()> {
             ScaffoldEngine::add_plugin(&project_dir, plugin)?;
         }
 
-        Commands::List => {
-            print_plugins_list();
+        Commands::List { json } => {
+            if json {
+                let catalog = novastack_core::catalog::catalog();
+                let text = serde_json::to_string_pretty(&catalog)
+                    .map_err(|e| NovaError::Other(format!("Failed to encode catalogue: {}", e)))?;
+                println!("{text}");
+            } else {
+                print_plugins_list();
+            }
         }
 
         Commands::Doctor => {

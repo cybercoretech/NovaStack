@@ -121,3 +121,26 @@ fn test_list_shows_templates() {
         .stdout(predicate::str::contains("Build Templates"))
         .stdout(predicate::str::contains("realtime"));
 }
+
+#[test]
+fn test_list_json_is_valid_and_complete() {
+    let output = Command::cargo_bin("novastack")
+        .unwrap()
+        .args(["list", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let catalog: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let names: Vec<&str> = catalog["templates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["rest", "htmx", "grpc", "realtime", "minimal"]);
+    assert!(catalog["plugins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["name"] == "auth" && p["files"][0] == "src/auth/mod.rs"));
+}

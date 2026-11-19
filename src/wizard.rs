@@ -35,7 +35,7 @@ pub fn run_wizard(initial_name: Option<String>, default_out: PathBuf) -> Result<
 
     let template_idx = Select::with_theme(&theme)
         .with_prompt("What kind of backend are you building?")
-        .items(&template_options)
+        .items(template_options)
         .default(0)
         .interact()
         .map_err(|_| NovaError::PromptCancelled)?;
@@ -81,7 +81,7 @@ pub fn run_wizard(initial_name: Option<String>, default_out: PathBuf) -> Result<
 
     let db_idx = Select::with_theme(&theme)
         .with_prompt("Select primary database backend")
-        .items(&db_options)
+        .items(db_options)
         .default(default_db_idx)
         .interact()
         .map_err(|_| NovaError::PromptCancelled)?;
@@ -104,7 +104,7 @@ pub fn run_wizard(initial_name: Option<String>, default_out: PathBuf) -> Result<
     if template != TemplateChoice::Minimal {
         let plugin_selections = MultiSelect::with_theme(&theme)
             .with_prompt("Select feature plugins (Space to toggle, Enter to confirm)")
-            .items(&plugin_options)
+            .items(plugin_options)
             .interact()
             .map_err(|_| NovaError::PromptCancelled)?;
 
