@@ -1,4 +1,5 @@
 pub mod archetypes;
+pub mod catalog;
 pub mod cli;
 pub mod cli_generate;
 pub mod config;
