@@ -128,12 +128,16 @@ compose_scenario() { # name, scenario, novastack args...
   image_size "$(docker compose ps -q app)"
 }
 
+# Script-level, not local: the EXIT trap runs after container_scenario has returned.
+container=""
+
 container_scenario() { # name, scenario, extra docker args (one string), novastack args...
   local name=$1 kind=$2 extra=$3; shift 3
+  container=$name
   "$novastack" new "$name" "$@" --no-interactive --skip-hooks >/dev/null
   cd "$name"
   docker build -t "novastack-smoke-$name" .
-  cleanup() { docker logs "$name" 2>&1 | tail -n 50 || true; docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm "$name-data" >/dev/null 2>&1 || true; }
+  cleanup() { docker logs "$container" 2>&1 | tail -n 50 || true; docker rm -f "$container" >/dev/null 2>&1 || true; docker volume rm "$container-data" >/dev/null 2>&1 || true; }
   trap cleanup EXIT
   # shellcheck disable=SC2086
   docker run -d --name "$name" -p 8081:8080 $extra "novastack-smoke-$name"
