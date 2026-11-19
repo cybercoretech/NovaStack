@@ -4,12 +4,8 @@
 all-features = true
 
 [advisories]
-# RustSec advisories are errors, including unmaintained crates, except:
-ignore = [
-    # number_prefix (unmaintained) comes from `indicatif`, which NovaStack declares but
-    # does not use. Remove this entry together with the unused dependency.
-    { id = "RUSTSEC-2025-0119", reason = "only via unused indicatif dependency; pending removal" },
-]
+# RustSec advisories, including unmaintained crates, are errors.
+ignore = []
 
 [licenses]
 confidence-threshold = 0.9
@@ -19,9 +15,6 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "Unicode-3.0",
     "Unlicense",
-    # option-ext (via `dirs`, also unused): file-level copyleft, compatible with
-    # distributing NovaStack under MIT OR Apache-2.0.
-    "MPL-2.0",
 ]
 
 [bans]
