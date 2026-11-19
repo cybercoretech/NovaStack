@@ -90,7 +90,7 @@
       <header class="section-head">
         <p class="kicker">// 02 · plugins</p>
         <h2 id="plugins-h">Add features without rewiring.</h2>
-        <p>Plugins work at creation (<code>--plugins auth,otel</code>) or later (<code>novastack add redis</code>), and both paths produce the same code. Open a card to see exactly what a plugin changes.</p>
+        <p>Turn a plugin on when you create a project (<code>--plugins auth</code>) or add it later (<code>novastack add auth</code>); both give the same result. Open a card for a short guide: what you get, how to install and set it up, how to try it and how to use it in your code.</p>
       </header>
       <div class="cards" id="plugin-cards"></div>
     </section>
@@ -131,18 +131,64 @@
     <section class="section" id="install" aria-labelledby="install-h">
       <header class="section-head">
         <p class="kicker">// 05 · install</p>
-        <h2 id="install-h">Up and running.</h2>
-        <p>Needs Rust <span data-bind="rust">—</span> or newer. NovaStack isn't on crates.io yet, so install it from the repository.</p>
+        <h2 id="install-h">From zero to a running backend.</h2>
+        <p>Five steps. Copy each block into a terminal.</p>
       </header>
-      <div class="code">
-        <div class="code-bar"><span>quickstart.sh</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="install-cmd">copy</button></div>
-<pre id="install-cmd"><code>cargo install --git https://github.com/cybercoretech/NovaStack
-novastack new my-api --db postgres --plugins auth
-cd my-api &amp;&amp; cp .env.example .env
+      <ol class="steps">
+        <li class="step">
+          <h3><span class="step-n">1</span>Check the requirements</h3>
+          <p>You need <b>Rust <span data-bind="rust">—</span> or newer</b> (install or update with <a href="https://rustup.rs" target="_blank" rel="noopener">rustup</a>). <b>Docker</b> is optional: generated projects use it for a local Postgres and <code>docker compose</code>.</p>
+          <div class="code"><div class="code-bar"><span>terminal</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="step-req">copy</button></div>
+<pre id="step-req"><code>rustup update stable
+rustc --version</code></pre></div>
+        </li>
+        <li class="step">
+          <h3><span class="step-n">2</span>Install NovaStack</h3>
+          <p>NovaStack isn't on crates.io yet, so install it from the repository. Then let <code>novastack doctor</code> check your toolchain (rustc, cargo, git, docker, sqlx, just).</p>
+          <div class="code"><div class="code-bar"><span>terminal</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="step-install">copy</button></div>
+<pre id="step-install"><code>cargo install --git https://github.com/cybercoretech/NovaStack
+novastack --version
+novastack doctor</code></pre></div>
+        </li>
+        <li class="step">
+          <h3><span class="step-n">3</span>Create a project</h3>
+          <p>Run <code>novastack new</code> with no arguments for an interactive wizard, or pass flags:</p>
+          <div class="code"><div class="code-bar"><span>terminal</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="step-new">copy</button></div>
+<pre id="step-new"><code>novastack new my-api --db postgres --plugins auth --no-interactive</code></pre></div>
+          <table class="flags">
+            <thead><tr><th scope="col">flag</th><th scope="col">what it does</th></tr></thead>
+            <tbody>
+              <tr><td><code>-t</code>, <code>--template</code></td><td><span id="flag-templates">the template</span> (default <code>rest</code>)</td></tr>
+              <tr><td><code>--db</code></td><td><code>postgres</code> (default), <code>sqlite</code> or <code>none</code></td></tr>
+              <tr><td><code>--plugins</code></td><td>comma-separated, e.g. <code>auth,otel,redis,workers</code></td></tr>
+              <tr><td><code>--dry-run</code></td><td>list the files it would write, write nothing</td></tr>
+              <tr><td><code>--out</code></td><td>parent directory (default: current directory)</td></tr>
+            </tbody>
+          </table>
+        </li>
+        <li class="step">
+          <h3><span class="step-n">4</span>Run it</h3>
+          <p>Copy the example environment, start Postgres, and run. (With <code>--db sqlite</code> or <code>none</code>, skip the <code>docker compose</code> line.)</p>
+          <div class="code"><div class="code-bar"><span>terminal</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="step-run">copy</button></div>
+<pre id="step-run"><code>cd my-api
+cp .env.example .env
+sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env   # auth only
 docker compose up -d db
-cargo run</code></pre>
-      </div>
-      <p class="honest"><b>// also</b> <code>novastack new</code> with no arguments starts an interactive wizard, <code>novastack list</code> shows everything available, and <code>novastack doctor</code> checks your toolchain.</p>
+cargo run</code></pre></div>
+          <p>In a second terminal:</p>
+          <div class="code"><div class="code-bar"><span>terminal</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="step-check">copy</button></div>
+<pre id="step-check"><code>curl localhost:8080/health
+# {"status":"ok","version":"0.1.0"}</code></pre></div>
+        </li>
+        <li class="step">
+          <h3><span class="step-n">5</span>Grow it</h3>
+          <p>Add plugins and components as you go. Run these inside the project directory.</p>
+          <div class="code"><div class="code-bar"><span>terminal</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="step-grow">copy</button></div>
+<pre id="step-grow"><code>novastack add redis                 # add a plugin later
+novastack generate handler orders   # new component, routed at /orders
+novastack list                      # templates, plugins and databases</code></pre></div>
+        </li>
+      </ol>
     </section>
 
     <section class="section" id="roadmap" aria-labelledby="roadmap-h">
