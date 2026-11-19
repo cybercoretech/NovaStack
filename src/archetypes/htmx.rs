@@ -22,7 +22,7 @@ impl Archetype for HtmxArchetype {
             files,
             "src/router.rs",
             P::ROUTE_ANCHOR,
-            ".merge(crate::web::routes())",
+            ".merge(crate::web::routes(crate::web::TodoStore::from_state(&state)))",
         )?;
         P::patch(files, "Cargo.toml", P::DEPS_ANCHOR, "askama = \"0.16\"\n")?;
         P::patch(

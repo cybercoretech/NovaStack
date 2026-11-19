@@ -51,14 +51,27 @@ image_size() { # container id
 # ---------- HTTP checks per scenario (base URL as $1) ----------
 
 checks_rest() {
-  local b=$1 token
+  local b=$1 token json='content-type: application/json' creds='{"username":"smoke","password":"smoke-password"}'
   expect "health" sh -c "curl -fsS $b/health | grep -q '\"ok\"'"
   expect "swagger ui" curl -fsS -o /dev/null "$b/docs/"
-  expect "create item" sh -c "curl -fsS -H 'content-type: application/json' -d '{\"name\":\"Widget\"}' $b/api/items | grep -q Widget"
-  token=$(curl -fsS -H 'content-type: application/json' -d '{"username":"smoke","password":"pw"}' "$b/auth/login" | sed -E 's/.*"token":"([^"]+)".*/\1/')
-  expect "auth/me with token" sh -c "curl -fsS -H 'Authorization: Bearer $token' $b/auth/me | grep -q smoke"
+  expect "create item" sh -c "curl -fsS -H '$json' -d '{\"name\":\"Widget\"}' $b/api/items | grep -q Widget"
+  expect "list items" sh -c "curl -fsS $b/api/items | grep -q Widget"
+  expect "register (201)" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} -H '$json' -d '$creds' $b/auth/register)\" = 201 ]"
+  expect "duplicate register (409)" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} -H '$json' -d '$creds' $b/auth/register)\" = 409 ]"
+  expect "short password rejected (422)" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} -H '$json' -d '{\"username\":\"shorty\",\"password\":\"pw\"}' $b/auth/register)\" = 422 ]"
+  expect "wrong password (401)" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} -H '$json' -d '{\"username\":\"smoke\",\"password\":\"wrong-password\"}' $b/auth/login)\" = 401 ]"
+  expect "unknown user (401)" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} -H '$json' -d '{\"username\":\"ghost\",\"password\":\"smoke-password\"}' $b/auth/login)\" = 401 ]"
+  token=$(curl -fsS -H "$json" -d "$creds" "$b/auth/login" | sed -E 's/.*"token":"([^"]+)".*/\1/')
+  expect "auth/me with token" sh -c "curl -fsS -H 'Authorization: Bearer $token' $b/auth/me | grep -q '\"username\":\"smoke\"'"
   expect "auth/me without token is 401" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} $b/auth/me)\" = 401 ]"
   expect "metrics" sh -c "curl -fsS $b/metrics | grep -q http_requests_total"
+}
+
+# Run by compose scenarios after `docker compose restart app`: data must have survived.
+after_restart_rest() {
+  local b=$1
+  expect "item survived restart" sh -c "curl -fsS $b/api/items | grep -q Widget"
+  expect "login works after restart" sh -c "curl -fsS -H 'content-type: application/json' -d '{\"username\":\"smoke\",\"password\":\"smoke-password\"}' $b/auth/login | grep -q token"
 }
 
 checks_grpc() {
@@ -78,6 +91,13 @@ checks_htmx() {
   expect "page lists the new todo" sh -c "curl -fsS $b/ | grep -q Milk"
   expect "delete removes it" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} -X DELETE $b/todos/$id)\" = 200 ]"
   expect "blank title is rejected (422)" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} -d 'title=+' $b/todos)\" = 422 ]"
+  expect "add a todo that stays" sh -c "curl -fsS -d 'title=Bread' $b/todos | grep -q Bread"
+}
+
+after_restart_htmx() {
+  local b=$1
+  expect "todo survived restart" sh -c "curl -fsS $b/ | grep -q Bread"
+  expect "deleted todo stays deleted" sh -c "! curl -fsS $b/ | grep -q Milk"
 }
 
 checks_realtime() {
@@ -124,6 +144,11 @@ compose_scenario() { # name, scenario, novastack args...
   docker compose up -d --build
   wait_for http://localhost:8080/health 90
   "checks_$kind" http://localhost:8080
+  if declare -F "after_restart_$kind" >/dev/null; then
+    docker compose restart app
+    wait_for http://localhost:8080/health 60
+    "after_restart_$kind" http://localhost:8080
+  fi
   expect "container healthcheck" healthy "$(docker compose ps -q app)"
   image_size "$(docker compose ps -q app)"
 }

@@ -1,0 +1,280 @@
+//! User accounts: registration, credential checks and lookups.
+//!
+{% if db == "none" %}
+//! This project has no database, so accounts live in memory and are lost on restart.
+//! Generate the project with `--db postgres` or `--db sqlite` to store them in a table.
+{% else %}
+//! Accounts are stored in the `users` table (`src/db/migrations`). Passwords are kept only as
+//! Argon2id hashes.
+{% endif %}
+
+use crate::auth::password::{hash_password, verify_password};
+use crate::error::AppError;
+{% if db == "none" %}
+use std::collections::HashMap;
+use std::sync::{Arc, PoisonError, RwLock};
+{% endif %}
+use std::sync::LazyLock;
+
+const USERNAME_LEN: std::ops::RangeInclusive<usize> = 3..=64;
+const PASSWORD_LEN: std::ops::RangeInclusive<usize> = 8..=128;
+
+{% if db == "none" %}
+#[derive(Clone)]
+{% else %}
+#[derive(Clone, sqlx::FromRow)]
+{% endif %}
+pub struct User {
+    pub id: i64,
+    pub username: String,
+    pub password_hash: String,
+}
+
+{% if db == "none" %}
+#[derive(Default)]
+struct Accounts {
+    next_id: i64,
+    by_id: HashMap<i64, User>,
+}
+
+/// In-memory account storage (this project has no database). The lock is never held across
+/// an `.await`, so a std lock is enough.
+#[derive(Clone, Default)]
+pub struct UserStore {
+    inner: Arc<RwLock<Accounts>>,
+}
+
+impl UserStore {
+    async fn insert(&self, username: &str, password_hash: String) -> Result<User, AppError> {
+        let mut accounts = self.inner.write().unwrap_or_else(PoisonError::into_inner);
+        if accounts.by_id.values().any(|u| u.username == username) {
+            return Err(AppError::Conflict("username is already taken".into()));
+        }
+        accounts.next_id += 1;
+        let user = User {
+            id: accounts.next_id,
+            username: username.to_string(),
+            password_hash,
+        };
+        accounts.by_id.insert(user.id, user.clone());
+        Ok(user)
+    }
+
+    pub async fn find_by_username(&self, username: &str) -> Result<Option<User>, AppError> {
+        let accounts = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        Ok(accounts.by_id.values().find(|u| u.username == username).cloned())
+    }
+
+    pub async fn find_by_id(&self, id: i64) -> Result<Option<User>, AppError> {
+        let accounts = self.inner.read().unwrap_or_else(PoisonError::into_inner);
+        Ok(accounts.by_id.get(&id).cloned())
+    }
+{% else %}
+{% if db == "postgres" %}
+type Pool = sqlx::PgPool;
+{% else %}
+type Pool = sqlx::SqlitePool;
+{% endif %}
+
+/// Account storage backed by the `users` table.
+#[derive(Clone)]
+pub struct UserStore {
+    db: Pool,
+}
+
+impl UserStore {
+    pub fn new(db: Pool) -> Self {
+        Self { db }
+    }
+
+    async fn insert(&self, username: &str, password_hash: String) -> Result<User, AppError> {
+        let result = sqlx::query_as::<_, User>(
+            "INSERT INTO users (username, password_hash) VALUES ($1, $2) \
+             RETURNING id, username, password_hash",
+        )
+        .bind(username)
+        .bind(password_hash)
+        .fetch_one(&self.db)
+        .await;
+        match result {
+            Ok(user) => Ok(user),
+            Err(err)
+                if err
+                    .as_database_error()
+                    .is_some_and(|db_err| db_err.is_unique_violation()) =>
+            {
+                Err(AppError::Conflict("username is already taken".into()))
+            }
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    pub async fn find_by_username(&self, username: &str) -> Result<Option<User>, AppError> {
+        let user = sqlx::query_as::<_, User>(
+            "SELECT id, username, password_hash FROM users WHERE username = $1",
+        )
+        .bind(username)
+        .fetch_optional(&self.db)
+        .await?;
+        Ok(user)
+    }
+
+    pub async fn find_by_id(&self, id: i64) -> Result<Option<User>, AppError> {
+        let user =
+            sqlx::query_as::<_, User>("SELECT id, username, password_hash FROM users WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&self.db)
+                .await?;
+        Ok(user)
+    }
+{% endif %}
+
+    /// Creates an account. Fails with `Validation` (422) for a bad username or password and
+    /// `Conflict` (409) when the username is taken.
+    pub async fn register(&self, username: &str, password: &str) -> Result<User, AppError> {
+        let username = username.trim();
+        validate(username, password)?;
+        let password = password.to_string();
+        let hash = blocking(move || hash_password(&password)).await?;
+        self.insert(username, hash).await
+    }
+
+    /// Checks a username and password. Unknown users and wrong passwords both fail with the
+    /// same `Unauthorized` (401), and both run one Argon2 verification, so neither the
+    /// response nor its timing reveals which usernames exist.
+    pub async fn authenticate(&self, username: &str, password: &str) -> Result<User, AppError> {
+        let user = self.find_by_username(username.trim()).await?;
+        let stored_hash = match &user {
+            Some(user) => user.password_hash.clone(),
+            None => DUMMY_HASH.clone().ok_or_else(|| {
+                AppError::Internal(anyhow::anyhow!("could not prepare the dummy password hash"))
+            })?,
+        };
+        let password = password.to_string();
+        let matches = blocking(move || verify_password(&password, &stored_hash)).await?;
+        match user {
+            Some(user) if matches => Ok(user),
+            _ => Err(AppError::Unauthorized("invalid username or password".into())),
+        }
+    }
+}
+
+/// Verified against when the username doesn't exist, to keep login timing uniform.
+static DUMMY_HASH: LazyLock<Option<String>> =
+    LazyLock::new(|| hash_password("novastack-timing-equalizer").ok());
+
+fn validate(username: &str, password: &str) -> Result<(), AppError> {
+    if !USERNAME_LEN.contains(&username.chars().count()) {
+        return Err(AppError::Validation(format!(
+            "username must be {} to {} characters",
+            USERNAME_LEN.start(),
+            USERNAME_LEN.end()
+        )));
+    }
+    if username.chars().any(char::is_whitespace) {
+        return Err(AppError::Validation("username must not contain spaces".into()));
+    }
+    if !PASSWORD_LEN.contains(&password.chars().count()) {
+        return Err(AppError::Validation(format!(
+            "password must be {} to {} characters",
+            PASSWORD_LEN.start(),
+            PASSWORD_LEN.end()
+        )));
+    }
+    Ok(())
+}
+
+/// Argon2 is deliberately slow; run it off the async worker threads.
+async fn blocking<T, F>(work: F) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+{% if db == "sqlite" %}
+    async fn store() -> Option<UserStore> {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./src/db/migrations").run(&pool).await.unwrap();
+        Some(UserStore::new(pool))
+    }
+{% elif db == "postgres" %}
+    /// Runs against the database in `DATABASE_URL`; skipped when it isn't set.
+    async fn store() -> Option<UserStore> {
+        let Ok(url) = std::env::var("DATABASE_URL") else {
+            eprintln!("skipping: set DATABASE_URL to run the user store tests");
+            return None;
+        };
+        let pool = sqlx::PgPool::connect(&url).await.unwrap();
+        sqlx::migrate!("./src/db/migrations").run(&pool).await.unwrap();
+        Some(UserStore::new(pool))
+    }
+{% else %}
+    async fn store() -> Option<UserStore> {
+        Some(UserStore::default())
+    }
+{% endif %}
+
+    /// A username no earlier test run has used (the Postgres database persists).
+    fn unique_name(prefix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        format!("{prefix}_{nanos}")
+    }
+
+    #[tokio::test]
+    async fn register_then_authenticate() {
+        let Some(users) = store().await else { return };
+        let name = unique_name("alice");
+
+        let created = users.register(&name, "correct horse").await.unwrap();
+        assert_eq!(created.username, name);
+        assert_ne!(created.password_hash, "correct horse");
+
+        let user = users.authenticate(&name, "correct horse").await.unwrap();
+        assert_eq!(user.id, created.id);
+        assert_eq!(users.find_by_id(created.id).await.unwrap().unwrap().username, name);
+    }
+
+    #[tokio::test]
+    async fn wrong_password_and_unknown_user_are_unauthorized() {
+        let Some(users) = store().await else { return };
+        let name = unique_name("bob");
+        users.register(&name, "correct horse").await.unwrap();
+
+        let wrong = users.authenticate(&name, "battery staple").await;
+        assert!(matches!(wrong, Err(AppError::Unauthorized(_))));
+        let unknown = users.authenticate(&unique_name("nobody"), "correct horse").await;
+        assert!(matches!(unknown, Err(AppError::Unauthorized(_))));
+    }
+
+    #[tokio::test]
+    async fn duplicate_username_conflicts() {
+        let Some(users) = store().await else { return };
+        let name = unique_name("carol");
+        users.register(&name, "correct horse").await.unwrap();
+        let again = users.register(&name, "another password").await;
+        assert!(matches!(again, Err(AppError::Conflict(_))));
+    }
+
+    #[tokio::test]
+    async fn rejects_weak_input() {
+        let Some(users) = store().await else { return };
+        assert!(matches!(users.register("ab", "correct horse").await, Err(AppError::Validation(_))));
+        assert!(matches!(users.register("has space", "correct horse").await, Err(AppError::Validation(_))));
+        assert!(matches!(users.register(&unique_name("dave"), "short").await, Err(AppError::Validation(_))));
+    }
+}

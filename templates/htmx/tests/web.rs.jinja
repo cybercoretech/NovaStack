@@ -5,6 +5,53 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use tower::ServiceExt;
+use {{ project_name_snake }}::web::{self, TodoStore};
+
+{% if db == "sqlite" %}
+/// A fresh in-memory SQLite database with the project's migrations applied.
+async fn app() -> Option<Router> {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::migrate!("./src/db/migrations").run(&pool).await.unwrap();
+    Some(web::routes(TodoStore::new(pool)))
+}
+{% elif db == "postgres" %}
+/// Runs against the database in `DATABASE_URL` (e.g. `docker compose up -d db`); the tests
+/// are skipped when it isn't set.
+async fn app() -> Option<Router> {
+    let Ok(url) = std::env::var("DATABASE_URL") else {
+        eprintln!("skipping: set DATABASE_URL to run the database-backed page tests");
+        return None;
+    };
+    let pool = sqlx::PgPool::connect(&url).await.unwrap();
+    sqlx::migrate!("./src/db/migrations").run(&pool).await.unwrap();
+    Some(web::routes(TodoStore::new(pool)))
+}
+{% else %}
+async fn app() -> Option<Router> {
+    Some(web::routes(TodoStore::default()))
+}
+{% endif %}
+
+/// Routes for requests that never reach the database (validation failures).
+fn app_without_db() -> Router {
+{% if db == "postgres" %}
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://localhost/unused")
+        .unwrap();
+    web::routes(TodoStore::new(pool))
+{% elif db == "sqlite" %}
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_lazy("sqlite::memory:")
+        .unwrap();
+    web::routes(TodoStore::new(pool))
+{% else %}
+    web::routes(TodoStore::default())
+{% endif %}
+}
 
 async fn call(app: &Router, method: Method, uri: &str, form: Option<&str>) -> (StatusCode, String) {
     let mut request = Request::builder().method(method).uri(uri);
@@ -27,7 +74,7 @@ async fn call(app: &Router, method: Method, uri: &str, form: Option<&str>) -> (S
 
 #[tokio::test]
 async fn index_renders_htmx_page() {
-    let app: Router = {{ project_name_snake }}::web::routes();
+    let Some(app) = app().await else { return };
     let (status, html) = call(&app, Method::GET, "/", None).await;
     assert_eq!(status, StatusCode::OK);
     assert!(html.contains("htmx.org"));
@@ -36,7 +83,7 @@ async fn index_renders_htmx_page() {
 
 #[tokio::test]
 async fn create_returns_escaped_fragment_and_delete_removes_it() {
-    let app: Router = {{ project_name_snake }}::web::routes();
+    let Some(app) = app().await else { return };
 
     let (status, fragment) = call(&app, Method::POST, "/todos", Some("title=%3Cb%3EMilk%3C%2Fb%3E")).await;
     assert_eq!(status, StatusCode::OK);
@@ -47,16 +94,22 @@ async fn create_returns_escaped_fragment_and_delete_removes_it() {
     let (_, page) = call(&app, Method::GET, "/", None).await;
     assert!(page.contains("Milk"));
 
-    let (status, body) = call(&app, Method::DELETE, "/todos/1", None).await;
+    let id = fragment
+        .split("hx-delete=\"/todos/")
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .unwrap();
+    let uri = format!("/todos/{id}");
+    let (status, body) = call(&app, Method::DELETE, &uri, None).await;
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_empty());
-    let (status, _) = call(&app, Method::DELETE, "/todos/1", None).await;
+    let (status, _) = call(&app, Method::DELETE, &uri, None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn rejects_blank_titles() {
-    let app: Router = {{ project_name_snake }}::web::routes();
+    let app = app_without_db();
     let (status, _) = call(&app, Method::POST, "/todos", Some("title=+++")).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }

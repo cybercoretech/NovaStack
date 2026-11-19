@@ -23,7 +23,7 @@ impl Archetype for RestArchetype {
             files,
             "src/router.rs",
             P::ROUTE_ANCHOR,
-            ".merge(crate::api::routes())",
+            ".merge(crate::api::routes(crate::api::items::ItemStore::from_state(&state)))",
         )?;
         P::patch(
             files,

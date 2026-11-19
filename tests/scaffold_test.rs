@@ -106,9 +106,41 @@ fn test_add_plugin_patches_config_and_state() {
     assert!(read("src/state.rs").contains("pub redis: deadpool_redis::Pool,"));
     assert!(read("src/handlers/mod.rs").contains("pub mod auth;"));
     assert!(read(".env.example").contains("JWT_SECRET="));
+    // No database: accounts live in memory and no users migration is written
+    assert!(read("src/state.rs").contains("let users = crate::auth::UserStore::default();"));
+    assert!(!target_dir.join("src/db").exists());
 
     // Installing twice is rejected
     assert!(ScaffoldEngine::add_plugin(&target_dir, PluginChoice::Auth).is_err());
+}
+
+#[test]
+fn test_auth_with_database_gets_users_table_and_persistent_examples() {
+    let temp_dir = tempdir().unwrap();
+    let target_dir = temp_dir.path().join("db-api");
+
+    ScaffoldEngine::execute(&ScaffoldConfig {
+        project_name: "db-api".to_string(),
+        target_dir: target_dir.clone(),
+        db: DbChoice::Sqlite,
+        plugins: vec![],
+        dry_run: false,
+        skip_hooks: true,
+        template: TemplateChoice::Rest,
+    })
+    .unwrap();
+    let read = |rel: &str| std::fs::read_to_string(target_dir.join(rel)).unwrap();
+
+    // The example resource is a table, not an in-memory map
+    assert!(read("src/db/migrations/20240101000001_items.sql").contains("CREATE TABLE"));
+    assert!(read("src/api/items.rs").contains("INSERT INTO items"));
+    assert!(!read("src/api/items.rs").contains("BTreeMap"));
+
+    // Adding auth later writes the users migration and backs the store with the pool
+    ScaffoldEngine::add_plugin(&target_dir, PluginChoice::Auth).unwrap();
+    assert!(read("src/db/migrations/20240101000002_users.sql").contains("username"));
+    assert!(read("src/state.rs").contains("let users = crate::auth::UserStore::new(db.clone());"));
+    assert!(read("src/handlers/auth.rs").contains("/register"));
 }
 
 #[test]

@@ -1,7 +1,15 @@
 //! Server-rendered pages. Templates live in `templates/` at the project root and are
 //! compiled into the binary by Askama; HTMX swaps the HTML fragments returned here.
+//!
+{% if db == "none" %}
+//! This project has no database, so todos live in memory (`TodoStore`) and reset on restart.
+{% else %}
+//! Todos are stored in the `todos` table (`src/db/migrations`) through `TodoStore`, which
+//! wraps the SQLx pool from `AppState::db`.
+{% endif %}
 
 use crate::error::AppError;
+use crate::state::AppState;
 use askama::Template;
 use axum::{
     extract::{Path, State},
@@ -10,29 +18,112 @@ use axum::{
     Form, Router,
 };
 use serde::Deserialize;
+{% if db == "none" %}
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+{% endif %}
 
 const MAX_TITLE_LEN: usize = 200;
 
+{% if db == "none" %}
 #[derive(Debug, Clone)]
+{% else %}
+#[derive(Debug, Clone, sqlx::FromRow)]
+{% endif %}
 pub struct Todo {
-    pub id: u64,
+    pub id: i64,
     pub title: String,
 }
 
+{% if db == "none" %}
 #[derive(Default)]
 struct Store {
-    next_id: u64,
-    todos: BTreeMap<u64, Todo>,
+    next_id: i64,
+    todos: BTreeMap<i64, Todo>,
 }
 
-/// Example in-memory storage; replace with queries against `AppState::db`.
+/// In-memory todo storage (this project has no database).
 #[derive(Clone, Default)]
 pub struct TodoStore {
     inner: Arc<RwLock<Store>>,
 }
+
+impl TodoStore {
+    /// Builds the store used by the running app.
+    pub fn from_state(_state: &AppState) -> Self {
+        Self::default()
+    }
+
+    pub async fn list(&self) -> Result<Vec<Todo>, AppError> {
+        Ok(self.inner.read().await.todos.values().cloned().collect())
+    }
+
+    pub async fn create(&self, title: &str) -> Result<Todo, AppError> {
+        let mut store = self.inner.write().await;
+        store.next_id += 1;
+        let todo = Todo {
+            id: store.next_id,
+            title: title.to_string(),
+        };
+        store.todos.insert(todo.id, todo.clone());
+        Ok(todo)
+    }
+
+    /// Returns `false` when there was no such todo.
+    pub async fn delete(&self, id: i64) -> Result<bool, AppError> {
+        Ok(self.inner.write().await.todos.remove(&id).is_some())
+    }
+}
+{% else %}
+{% if db == "postgres" %}
+type Pool = sqlx::PgPool;
+{% else %}
+type Pool = sqlx::SqlitePool;
+{% endif %}
+
+/// Todo storage backed by the `todos` table.
+#[derive(Clone)]
+pub struct TodoStore {
+    db: Pool,
+}
+
+impl TodoStore {
+    pub fn new(db: Pool) -> Self {
+        Self { db }
+    }
+
+    /// Builds the store used by the running app from its shared database pool.
+    pub fn from_state(state: &AppState) -> Self {
+        Self::new(state.db.clone())
+    }
+
+    pub async fn list(&self) -> Result<Vec<Todo>, AppError> {
+        let todos = sqlx::query_as::<_, Todo>("SELECT id, title FROM todos ORDER BY id")
+            .fetch_all(&self.db)
+            .await?;
+        Ok(todos)
+    }
+
+    pub async fn create(&self, title: &str) -> Result<Todo, AppError> {
+        let todo =
+            sqlx::query_as::<_, Todo>("INSERT INTO todos (title) VALUES ($1) RETURNING id, title")
+                .bind(title)
+                .fetch_one(&self.db)
+                .await?;
+        Ok(todo)
+    }
+
+    /// Returns `false` when there was no such todo.
+    pub async fn delete(&self, id: i64) -> Result<bool, AppError> {
+        let result = sqlx::query("DELETE FROM todos WHERE id = $1")
+            .bind(id)
+            .execute(&self.db)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+}
+{% endif %}
 
 #[derive(Template)]
 #[template(path = "index.html")]
@@ -52,7 +143,7 @@ pub struct NewTodo {
     pub title: String,
 }
 
-pub fn routes<S>() -> Router<S>
+pub fn routes<S>(store: TodoStore) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
@@ -60,7 +151,7 @@ where
         .route("/", get(index))
         .route("/todos", axum::routing::post(create_todo))
         .route("/todos/{id}", delete(delete_todo))
-        .with_state(TodoStore::default())
+        .with_state(store)
 }
 
 fn render(template: &impl Template) -> Result<Html<String>, AppError> {
@@ -72,7 +163,7 @@ fn render(template: &impl Template) -> Result<Html<String>, AppError> {
 
 /// `GET /`: the full page.
 async fn index(State(store): State<TodoStore>) -> Result<Html<String>, AppError> {
-    let todos = store.inner.read().await.todos.values().cloned().collect();
+    let todos = store.list().await?;
     render(&IndexPage {
         title: env!("CARGO_PKG_NAME"),
         todos,
@@ -94,27 +185,18 @@ async fn create_todo(
         )));
     }
 
-    let mut store = store.inner.write().await;
-    store.next_id += 1;
-    let todo = Todo {
-        id: store.next_id,
-        title: title.to_string(),
-    };
-    store.todos.insert(todo.id, todo.clone());
+    let todo = store.create(title).await?;
     render(&TodoFragment { todo })
 }
 
 /// `DELETE /todos/{id}`: empty body, so HTMX removes the `<li>` it swaps.
 async fn delete_todo(
     State(store): State<TodoStore>,
-    Path(id): Path<u64>,
+    Path(id): Path<i64>,
 ) -> Result<Html<String>, AppError> {
-    store
-        .inner
-        .write()
-        .await
-        .todos
-        .remove(&id)
-        .map(|_| Html(String::new()))
-        .ok_or(AppError::NotFound)
+    if store.delete(id).await? {
+        Ok(Html(String::new()))
+    } else {
+        Err(AppError::NotFound)
+    }
 }

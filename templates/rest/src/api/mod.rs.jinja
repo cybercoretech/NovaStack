@@ -18,16 +18,20 @@ use utoipa_swagger_ui::SwaggerUi;
         items::delete_item
     ),
     components(schemas(items::Item, items::NewItem)),
-    tags((name = "items", description = "Example in-memory resource"))
+    {% if db == "none" %}
+    tags((name = "items", description = "Example resource (in memory)"))
+{% else %}
+    tags((name = "items", description = "Example resource stored in the database"))
+{% endif %}
 )]
 pub struct ApiDoc;
 
 /// API routes plus Swagger UI at `/docs` and the spec at `/api-docs/openapi.json`.
-pub fn routes<S>() -> Router<S>
+pub fn routes<S>(items: items::ItemStore) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
     Router::new()
-        .nest("/api/items", items::router())
+        .nest("/api/items", items::router(items))
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()))
 }
