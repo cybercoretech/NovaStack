@@ -52,6 +52,7 @@
         <p class="lede">NovaStack generates Axum backends that compile on the first <code>cargo run</code>: typed config, error handling, structured logs, graceful shutdown, Docker and tests. Pick a template, add plugins, and generate new components as the project grows.</p>
         <div class="cta">
           <a class="btn btn-primary" href="#install">$ install</a>
+          <a class="btn btn-ghost" href="#demo">try the live demo</a>
           <a class="btn btn-ghost" href="#templates">browse the templates</a>
         </div>
         <ul class="facts" aria-label="At a glance">
@@ -128,9 +129,46 @@
       </div>
     </section>
 
+    <section class="section" id="demo" aria-labelledby="demo-h">
+      <header class="section-head">
+        <p class="kicker">// 05 · live demo</p>
+        <h2 id="demo-h">Try generated apps, live.</h2>
+        <p>Four projects exactly as <code>novastack new</code> creates them, built by CI from the latest release and running in hardened containers behind a Cloudflare Tunnel. Register, log in, add data: it's all real, and it's wiped every night.</p>
+      </header>
+      <div class="demos">
+        <article class="panel demo">
+          <h3><span class="comment">// </span>rest</h3>
+          <p class="demo-stack"><code>-t rest --db postgres --plugins auth,otel</code></p>
+          <p>JSON API with Swagger UI. Create items, register an account, log in and call the protected <code>/auth/me</code>, all from the browser.</p>
+          <a class="btn btn-primary btn-sm" href="https://rest-demo.cybercoretech.net/docs/" target="_blank" rel="noopener">open Swagger UI <span aria-hidden="true">↗</span><span class="sr"> (opens in a new tab)</span></a>
+        </article>
+        <article class="panel demo">
+          <h3><span class="comment">// </span>htmx</h3>
+          <p class="demo-stack"><code>-t htmx --db postgres --plugins auth</code></p>
+          <p>Server-rendered todo list. Adding and deleting swaps HTML fragments from the server; the list is stored in Postgres.</p>
+          <a class="btn btn-primary btn-sm" href="https://htmx-demo.cybercoretech.net/" target="_blank" rel="noopener">open the todo app <span aria-hidden="true">↗</span><span class="sr"> (opens in a new tab)</span></a>
+        </article>
+        <article class="panel demo">
+          <h3><span class="comment">// </span>realtime</h3>
+          <p class="demo-stack"><code>-t realtime --db none</code></p>
+          <p>WebSocket and Server-Sent Events. Open it in two tabs and watch a message sent in one arrive in the other.</p>
+          <a class="btn btn-primary btn-sm" href="https://live-demo.cybercoretech.net/" target="_blank" rel="noopener">open the realtime page <span aria-hidden="true">↗</span><span class="sr"> (opens in a new tab)</span></a>
+        </article>
+        <article class="panel demo">
+          <h3><span class="comment">// </span>grpc</h3>
+          <p class="demo-stack"><code>-t grpc --db none</code></p>
+          <p>Tonic service with reflection, on HTTP/2. Browsers can't speak gRPC, so call it with <a href="https://github.com/fullstorydev/grpcurl" target="_blank" rel="noopener">grpcurl</a>:</p>
+          <div class="code"><div class="code-bar"><span>terminal</span><button class="copy btn btn-ghost btn-sm" type="button" data-copy-from="demo-grpc">copy</button></div>
+<pre id="demo-grpc"><code>grpcurl grpc-demo.cybercoretech.net:443 list
+grpcurl -d '{"name":"you"}' grpc-demo.cybercoretech.net:443 greeter.v1.Greeter/SayHello</code></pre></div>
+        </article>
+      </div>
+      <p class="demo-note">Demo data is public and reset daily at 04:00 Pacific; don't enter anything real. Requests to login and write endpoints are rate-limited. How it's run: <a href="https://github.com/cybercoretech/NovaStack/tree/main/demo" target="_blank" rel="noopener"><code>demo/</code></a> (rootless Podman, no open ports).</p>
+    </section>
+
     <section class="section" id="install" aria-labelledby="install-h">
       <header class="section-head">
-        <p class="kicker">// 05 · install</p>
+        <p class="kicker">// 06 · install</p>
         <h2 id="install-h">From zero to a running backend.</h2>
         <p>Five steps. Copy each block into a terminal.</p>
       </header>
@@ -193,15 +231,15 @@ novastack list                      # templates, plugins and databases</code></p
 
     <section class="section" id="roadmap" aria-labelledby="roadmap-h">
       <header class="section-head">
-        <p class="kicker">// 06 · status</p>
+        <p class="kicker">// 07 · status</p>
         <h2 id="roadmap-h">What's not there yet.</h2>
         <p>NovaStack is early (<span data-bind="version">—</span>). These gaps are known and tracked:</p>
       </header>
       <ul class="gaps">
         <li><b>Plugins guard HTTP only.</b> The auth plugin protects HTTP routes; there's no gRPC interceptor or WebSocket authentication yet.</li>
-        <li><b>The login handler is a stub.</b> Generated <code>/auth/login</code> issues a token for any non-empty credentials and is clearly marked; wire it to your user store.</li>
+        <li><b>Auth basics only.</b> Accounts, Argon2 password hashes and JWT login are real, but there's no rate limiting, email verification or password reset in the generated code yet.</li>
         <li><b>Metrics, not tracing export.</b> The <code>otel</code> plugin serves Prometheus metrics; OpenTelemetry trace export is planned.</li>
-        <li><b>In-memory examples.</b> The example resources in the REST and HTMX templates keep data in memory, so they work with any database choice.</li>
+        <li><b>No upgrade path.</b> Projects generated with an older NovaStack don't get template improvements automatically; there's no <code>novastack upgrade</code> yet.</li>
       </ul>
     </section>
   </main>

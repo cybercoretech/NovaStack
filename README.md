@@ -10,6 +10,12 @@
 
 Every generated project comes with typed configuration, a central error type that never leaks internals to clients, structured JSON logging, graceful shutdown, a multi-stage Dockerfile, `docker-compose.yml`, a `Justfile` and tests. You can browse the real generated files on the website: **<https://novastack-rs.pages.dev>**.
 
+**🌐 Live demo:** four generated apps, running as `novastack new` creates them (data reset nightly):
+[REST + Swagger UI](https://rest-demo.cybercoretech.net/docs/) ·
+[HTMX todos](https://htmx-demo.cybercoretech.net/) ·
+[WebSocket/SSE](https://live-demo.cybercoretech.net/) ·
+gRPC: `grpcurl grpc-demo.cybercoretech.net:443 list`. How it's run: [`demo/`](demo/).
+
 ## 🧱 Templates
 
 Pick a starting point with `-t` / `--template` (default `rest`). All templates share the same base, and every plugin works with every template.
