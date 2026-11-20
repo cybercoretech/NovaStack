@@ -1,0 +1,23 @@
+[Unit]
+Description=NovaStack demo: Cloudflare Tunnel (the only way in; makes outbound connections only)
+After=demo-rest.service demo-htmx.service demo-realtime.service demo-grpc.service
+
+[Container]
+ContainerName=demo-cloudflared
+Image=docker.io/cloudflare/cloudflared:2026.10.7
+# Hostname -> service routes live in the Cloudflare dashboard (tunnel "novastack-demo")
+Exec=tunnel --no-autoupdate run
+# TUNNEL_TOKEN=... (created by you from the dashboard; never committed or printed)
+EnvironmentFile=%h/.config/novastack-demo/tunnel.env
+Network=novastack-demo.network
+Network=novastack-demo-egress.network
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=ALL
+PodmanArgs=--memory=128m --cpus=0.5 --pids-limit=256
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

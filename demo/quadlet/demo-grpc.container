@@ -1,0 +1,24 @@
+[Unit]
+Description=NovaStack demo: gRPC service at grpc-demo.cybercoretech.net
+
+[Container]
+ContainerName=demo-grpc
+Image=ghcr.io/cybercoretech/novastack-demo-grpc:latest
+# podman-auto-update.timer pulls a newer :latest (published on each release)
+AutoUpdate=registry
+Network=novastack-demo.network
+# Written by demo/install.sh (database URL, JWT secret); never committed
+EnvironmentFile=%h/.config/novastack-demo/grpc.env
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=ALL
+PodmanArgs=--memory=128m --cpus=0.5 --pids-limit=256
+HealthCmd=curl -fsS http://localhost:8080/health
+HealthInterval=15s
+Notify=healthy
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

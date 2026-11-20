@@ -1,0 +1,105 @@
+# Builds the live-demo images (demo/README.md) with the NovaStack in this commit, checks each
+# one over HTTP with scripts/docker-smoke.sh, and publishes it to GHCR. The demo host's
+# podman-auto-update.timer picks up the new :latest.
+name: Demo images
+
+on:
+  release:
+    types: [published]
+  # Build and test (no publish) when the demo setup changes
+  pull_request:
+    paths:
+      - "demo/**"
+      - ".github/workflows/demo-images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: demo-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: demo image (${{ matrix.demo }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - demo: rest
+            args: -t rest --db postgres --plugins auth,otel
+            db: rest
+          - demo: htmx
+            args: -t htmx --db postgres --plugins auth
+            db: htmx
+          - demo: realtime
+            args: -t realtime --db none
+            db: ""
+          - demo: grpc
+            args: -t grpc --db none
+            db: ""
+    env:
+      IMAGE: ghcr.io/cybercoretech/novastack-demo-${{ matrix.demo }}
+      # Publish from releases and main only; other refs build and test without pushing.
+      PUBLISH: ${{ github.event_name == 'release' || github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build novastack
+        run: cargo build --locked --release
+
+      - name: Generate the demo project
+        run: |
+          mkdir -p "$RUNNER_TEMP/demo"
+          cd "$RUNNER_TEMP/demo"
+          # shellcheck disable=SC2086
+          "$GITHUB_WORKSPACE/target/release/novastack" new demo-${{ matrix.demo }} ${{ matrix.args }} --no-interactive --skip-hooks
+
+      - name: Build the image
+        run: |
+          version=$("$GITHUB_WORKSPACE/target/release/novastack" --version | awk '{print $2}')
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.description=NovaStack ${version} live demo: ${{ matrix.demo }}" \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            -t "$IMAGE:test" "$RUNNER_TEMP/demo/demo-${{ matrix.demo }}"
+
+      - name: Run it like the demo host does and check it over HTTP
+        run: |
+          docker network create demo
+          env_args=(-e HOST=0.0.0.0 -e PORT=8080 -e RUST_LOG=info)
+          if [ -n "${{ matrix.db }}" ]; then
+            docker run -d --name demo-postgres --network demo \
+              -e POSTGRES_USER=novastack -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=${{ matrix.db }} \
+              postgres:17.10-alpine
+            for _ in $(seq 30); do docker exec demo-postgres pg_isready -U novastack -d ${{ matrix.db }} && break; sleep 2; done
+            env_args+=(-e "DATABASE_URL=postgres://novastack:ci@demo-postgres:5432/${{ matrix.db }}" \
+                       -e JWT_SECRET="$(openssl rand -hex 32)")
+          fi
+          # Same hardening as demo/quadlet: read-only, no capabilities, no privilege gain
+          docker run -d --name app --network demo -p 8080:8080 \
+            --read-only --cap-drop all --security-opt no-new-privileges \
+            --memory 128m "${env_args[@]}" "$IMAGE:test"
+          for _ in $(seq 30); do curl -fs http://localhost:8080/health >/dev/null && break; sleep 2; done
+          SMOKE_URL=http://localhost:8080 bash scripts/docker-smoke.sh unused "$RUNNER_TEMP/smoke" ${{ matrix.demo }}
+          echo "image size: $(docker image inspect -f '{{.Size}}' "$IMAGE:test" | awk '{printf "%.1f MB", $1 / 1000000}')"
+
+      - name: Container logs
+        if: failure()
+        run: docker logs app 2>&1 | tail -n 80 || true
+
+      - name: Publish to GHCR
+        if: env.PUBLISH == 'true'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          # A release gets its version tag; a manual run on main only refreshes :latest.
+          if [ "${{ github.event_name }}" = release ]; then extra="$VERSION"; else extra="sha-${GITHUB_SHA::7}"; fi
+          for tag in latest "$extra"; do
+            docker tag "$IMAGE:test" "$IMAGE:$tag"
+            docker push "$IMAGE:$tag"
+          done

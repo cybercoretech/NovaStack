@@ -179,3 +179,30 @@ jobs:
         run: cargo build --locked --release
       - name: Smoke-test the generated project in Docker
         run: ./scripts/docker-smoke.sh "$PWD/target/release/novastack" "$RUNNER_TEMP/smoke" ${{ matrix.scenario }}
+
+  demo-units:
+    name: demo units (quadlet + scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Shell scripts
+        run: shellcheck demo/install.sh scripts/docker-smoke.sh
+      - name: Quadlet units generate cleanly
+        # Podman 5.8's own generator, in its official image; fails on any unknown key or bad reference.
+        run: |
+          docker run --rm -v "$PWD/demo/quadlet:/units:ro" -e QUADLET_UNIT_DIRS=/units \
+            quay.io/podman/stable:v5.8.7 /usr/libexec/podman/quadlet -dryrun -user > generated.txt 2> quadlet.log || { cat quadlet.log; exit 1; }
+          if grep -iE 'error|unsupported|invalid' quadlet.log; then exit 1; fi
+          for unit in demo-postgres demo-rest demo-htmx demo-realtime demo-grpc demo-cloudflared; do
+            grep -q -- "---$unit.service---" generated.txt || { echo "missing $unit.service"; exit 1; }
+          done
+          # No unit may publish a port: the tunnel is the only way in.
+          if grep -E -- '--publish|-p [0-9]' generated.txt; then echo "a demo unit publishes a port"; exit 1; fi
+          echo "6 container units generated, no published ports"
+      - name: Reset units are valid systemd units
+        # demo-postgres.service only exists once Quadlet has generated it on the host
+        run: |
+          out=$(systemd-analyze verify --man=no demo/systemd/novastack-demo-reset.service demo/systemd/novastack-demo-reset.timer 2>&1 || true)
+          echo "$out"
+          # Only judge our units: the runner's own system units print unrelated warnings.
+          if echo "$out" | grep -E 'novastack-demo-reset|demo/systemd/' | grep -v 'Unit demo-postgres.service not found' | grep -q .; then exit 1; fi
