@@ -1,0 +1,4 @@
+# Postgres <-> the apps that use it (rest, htmx). cloudflared is not on it.
+[Network]
+NetworkName=novastack-demo-db
+Internal=true

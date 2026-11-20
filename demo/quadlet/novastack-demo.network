@@ -1,0 +1,4 @@
+# Apps <-> cloudflared. Internal: no route to the internet or the LAN.
+[Network]
+NetworkName=novastack-demo
+Internal=true

@@ -1,0 +1,26 @@
+[Unit]
+Description=NovaStack demo: Postgres (databases "rest" and "htmx")
+
+[Container]
+ContainerName=demo-postgres
+Image=docker.io/library/postgres:17.10-alpine
+Network=novastack-demo-db.network
+Volume=novastack-demo-pg.volume:/var/lib/postgresql/data
+# Creates the second database on first start
+Volume=%h/.config/novastack-demo/init.sql:/docker-entrypoint-initdb.d/init.sql:ro,Z
+# POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB (written by demo/install.sh)
+EnvironmentFile=%h/.config/novastack-demo/postgres.env
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=ALL
+AddCapability=CHOWN DAC_OVERRIDE FOWNER SETGID SETUID
+PodmanArgs=--memory=256m --cpus=1
+HealthCmd=pg_isready -U novastack -d rest
+HealthInterval=10s
+Notify=healthy
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
