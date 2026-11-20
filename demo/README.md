@@ -74,8 +74,14 @@ demo/install.sh           # install or update the units, generate secrets once, 
 | Update units after a `git pull` | `demo/install.sh` |
 | Stop and remove | `demo/install.sh --uninstall` (keeps the secrets and the `novastack-demo-pg` volume) |
 
+## Troubleshooting
+
+- **Tunnel won't connect, `cloudflared` logs `dial udp 10.89.x.1:53: i/o timeout`, often after the host changed networks.** Rootless Podman routes every bridge-networked container through one shared network namespace, which copies the host's routes when it's created. After a network change it can be left without a default route. Check with `podman unshare --rootless-netns ip route`: there must be a `default via …` line. To fix it, stop every rootless container that uses a bridge network (the demo units plus any other stacks, e.g. `systemctl --user stop 'demo-*'`), confirm `podman ps` is empty, then start them again. The namespace is rebuilt with the current routes.
+- **`/metrics` is public.** In the tunnel's Routes, the `^/metrics` → `http_status:404` route must be above the plain `rest-demo` route (routes match top to bottom). `cloudflared`'s log line `Updated to new configuration` lists the order it uses.
+- **An app keeps restarting:** `journalctl --user -u demo-<app>` and `podman logs demo-<app>`. Its settings are in `~/.config/novastack-demo/<app>.env`.
+
 ## Checks
 
-- **CI, every PR** (`demo units` job): Podman 5.8's Quadlet generator accepts every unit, all six services are generated, no unit publishes a port, `install.sh` passes shellcheck, and the reset units pass `systemd-analyze verify`.
+- **CI, every PR** (`demo units` job): Podman 5.8's Quadlet generator accepts every unit, all six services are generated, no unit publishes a port, `install.sh` passes shellcheck, the reset units pass `systemd-analyze verify`, and the reset unit's SQL (after systemd's `$$` unescaping) runs against Postgres, both before and after the tables exist.
 - **Each image build:** the image runs read-only with no capabilities (and Postgres where needed) and passes the same HTTP checks as the Docker smoke tests.
 - **After deploying:** `curl -4 https://rest-demo.cybercoretech.net/health` and the other hostnames, plus `grpcurl grpc-demo.cybercoretech.net:443 list`.

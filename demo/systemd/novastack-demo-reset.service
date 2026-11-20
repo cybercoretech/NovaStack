@@ -5,6 +5,7 @@ After=demo-postgres.service
 
 [Service]
 Type=oneshot
-# Tables exist once the apps have run their migrations; IF EXISTS keeps a fresh install quiet.
-ExecStart=/usr/bin/podman exec demo-postgres psql -U novastack -d rest -v ON_ERROR_STOP=1 -c "DO $$ BEGIN IF to_regclass('public.items') IS NOT NULL THEN TRUNCATE items, users RESTART IDENTITY; END IF; END $$;"
-ExecStart=/usr/bin/podman exec demo-postgres psql -U novastack -d htmx -v ON_ERROR_STOP=1 -c "DO $$ BEGIN IF to_regclass('public.todos') IS NOT NULL THEN TRUNCATE todos, users RESTART IDENTITY; END IF; END $$;"
+# Tables exist once the apps have run their migrations; the check keeps a fresh install quiet.
+# systemd turns $$ into $, so the SQL dollar quotes are written $$$$.
+ExecStart=/usr/bin/podman exec demo-postgres psql -U novastack -d rest -v ON_ERROR_STOP=1 -c "DO $$$$ BEGIN IF to_regclass('public.items') IS NOT NULL THEN TRUNCATE items, users RESTART IDENTITY; END IF; END $$$$;"
+ExecStart=/usr/bin/podman exec demo-postgres psql -U novastack -d htmx -v ON_ERROR_STOP=1 -c "DO $$$$ BEGIN IF to_regclass('public.todos') IS NOT NULL THEN TRUNCATE todos, users RESTART IDENTITY; END IF; END $$$$;"

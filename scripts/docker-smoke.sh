@@ -109,7 +109,7 @@ checks_realtime() {
   expect "publish accepted (202)" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} -H 'content-type: application/json' -d '{\"message\":\"smoke-hello\"}' $b/publish)\" = 202 ]"
   wait "$sse" || true
   expect "SSE stream delivered the message" grep -q 'data: smoke-hello' "$events"
-  expect "websocket upgrade (101)" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} --max-time 3 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' $b/ws)\" = 101 ]"
+  expect "websocket upgrade (101)" sh -c "[ \"\$(curl -s -o /dev/null -w %{http_code} --max-time 3 --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' $b/ws)\" = 101 ]"
 }
 
 checks_minimal() {

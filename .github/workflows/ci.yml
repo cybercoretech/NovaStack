@@ -206,3 +206,6 @@ jobs:
           echo "$out"
           # Only judge our units: the runner's own system units print unrelated warnings.
           if echo "$out" | grep -E 'novastack-demo-reset|demo/systemd/' | grep -v 'Unit demo-postgres.service not found' | grep -q .; then exit 1; fi
+      - name: Reset SQL runs as systemd would run it
+        # Unescapes $$ like systemd, then runs it against a throwaway Postgres (before and after tables exist)
+        run: python3 demo/tools/check-reset.py docker
