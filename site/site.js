@@ -144,7 +144,7 @@ tokio::spawn(async move {
 };
 const NAV = [
   ["top", "start"], ["templates", "templates"], ["plugins", "plugins"], ["generate", "generate"],
-  ["verified", "verified"], ["install", "install"], ["roadmap", "status"],
+  ["verified", "verified"], ["demo", "live demo"], ["install", "install"], ["roadmap", "status"],
 ];
 
 /* ---------- Tiny syntax highlighter ---------- */

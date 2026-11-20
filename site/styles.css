@@ -266,6 +266,14 @@ h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
 .card-cmd { align-self: flex-start; font-size: 11.5px; }
 
 /* Gaps */
+.demos { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.demo { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.demo h3 { margin: 0; font-size: 15px; color: var(--white); }
+.demo p { margin: 0; color: var(--muted); font-size: 13px; }
+.demo .demo-stack code { font-size: 11.5px; white-space: normal; overflow-wrap: anywhere; }
+.demo .btn { justify-self: start; }
+.demo .code pre { overflow-x: auto; }
+.demo-note { margin: 14px 0 0; color: var(--muted); font-size: 12.5px; max-width: 820px; }
 .gaps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; max-width: 820px; }
 .gaps li { padding: 12px 14px; border-left: 2px solid var(--purple); background: color-mix(in srgb, var(--panel) 70%, transparent); border-radius: 0 8px 8px 0; color: var(--muted); }
 .gaps b { color: var(--white); font-weight: 600; }
@@ -289,6 +297,7 @@ h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
 /* Wider screens */
 @media (min-width: 640px) {
   .cards { grid-template-columns: repeat(2, 1fr); }
+  .demos { grid-template-columns: repeat(2, 1fr); }
 }
 @media (min-width: 900px) {
   .hero { grid-template-columns: 1.05fr 1fr; padding-top: 72px; }
