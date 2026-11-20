@@ -204,4 +204,5 @@ jobs:
         run: |
           out=$(systemd-analyze verify --man=no demo/systemd/novastack-demo-reset.service demo/systemd/novastack-demo-reset.timer 2>&1 || true)
           echo "$out"
-          if echo "$out" | grep -v 'demo-postgres.service' | grep -q .; then exit 1; fi
+          # Only judge our units: the runner's own system units print unrelated warnings.
+          if echo "$out" | grep -E 'novastack-demo-reset|demo/systemd/' | grep -v 'Unit demo-postgres.service not found' | grep -q .; then exit 1; fi
